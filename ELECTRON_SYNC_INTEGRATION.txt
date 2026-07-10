@@ -1,0 +1,233 @@
+# Electron EXE Sync Integration Guide
+
+## Overview
+This guide explains how to integrate the Electron EXE project with your backend for database synchronization.
+
+## What Was Added
+
+### New File: `src/main/syncHandlers.js`
+This module provides IPC handlers for database synchronization, allowing the backend to access the encrypted database for sync operations.
+
+### Updated File: `src/main/index.js`
+Added import for `./syncHandlers.js` to register the sync IPC handlers.
+
+## Available IPC Handlers
+
+### 1. sync:get-db-info
+Get database information and encryption status.
+
+**Returns:**
+```javascript
+{
+  success: true,
+  info: {
+    dbPath: "path/to/data.db",
+    encryptedDbPath: "path/to/data.db.enc",
+    tempSyncDir: "path/to/temp_sync",
+    isEncrypted: true,
+    hasUnencrypted: false,
+    dbSize: 286752
+  }
+}
+```
+
+### 2. sync:create-temp-db
+Create a temporary decrypted copy of the database for sync operations.
+
+**Returns:**
+```javascript
+{
+  success: true,
+  tempDbPath: "path/to/temp_sync/data-1234567890.db",
+  timestamp: 1234567890
+}
+```
+
+**Note:** This automatically decrypts the encrypted database if it exists, or copies the unencrypted version if available.
+
+### 3. sync:get-temp-db
+Get the path to a temporary database by timestamp.
+
+**Parameters:**
+- `timestamp` (number): The timestamp returned from `sync:create-temp-db`
+
+**Returns:**
+```javascript
+{
+  success: true,
+  tempDbPath: "path/to/temp_sync/data-1234567890.db"
+}
+```
+
+### 4. sync:cleanup-temp-db
+Clean up a specific temporary database file.
+
+**Parameters:**
+- `timestamp` (number): The timestamp of the temp database to clean up
+
+**Returns:**
+```javascript
+{
+  success: true
+}
+```
+
+### 5. sync:cleanup-all-temp
+Clean up all temporary database files in the temp_sync directory.
+
+**Returns:**
+```javascript
+{
+  success: true,
+  cleanedCount: 5
+}
+```
+
+### 6. sync:get-tables
+Get all table names from the temporary database.
+
+**Parameters:**
+- `timestamp` (number): The timestamp of the temp database
+
+**Returns:**
+```javascript
+{
+  success: true,
+  tables: ["products", "clients", "purchases", "sales", "accounts", "ledger"]
+}
+```
+
+### 7. sync:get-table-count
+Get the row count for a specific table.
+
+**Parameters:**
+- `timestamp` (number): The timestamp of the temp database
+- `tableName` (string): The name of the table
+
+**Returns:**
+```javascript
+{
+  success: true,
+  count: 150
+}
+```
+
+## Sync Workflow
+
+### Step 1: Check Database Status
+```javascript
+const dbInfo = await ipcRenderer.invoke('sync:get-db-info')
+console.log('Database info:', dbInfo.info)
+```
+
+### Step 2: Create Temporary Database
+```javascript
+const tempResult = await ipcRenderer.invoke('sync:create-temp-db')
+const { tempDbPath, timestamp } = tempResult
+```
+
+### Step 3: Access Database
+The backend can now access the database at `tempDbPath` for sync operations.
+
+### Step 4: Validate (Optional)
+```javascript
+const tables = await ipcRenderer.invoke('sync:get-tables', timestamp)
+const count = await ipcRenderer.invoke('sync:get-table-count', timestamp, 'products')
+```
+
+### Step 5: Cleanup
+```javascript
+await ipcRenderer.invoke('sync:cleanup-temp-db', timestamp)
+```
+
+## Security Features
+
+- **Automatic Decryption**: The system automatically decrypts the encrypted database for sync operations
+- **Temporary Files**: Database copies are created in a temporary directory
+- **Auto Cleanup**: Temporary files can be cleaned up after sync completion
+- **No Permanent Storage**: The main encrypted database is never modified during sync
+
+## Integration with Backend
+
+Since this is an Electron app, your backend needs to:
+
+1. **Run the Electron app** (or have it running)
+2. **Use Electron's IPC** to communicate with the sync handlers
+3. **Access the temporary database file** for sync operations
+
+### Option 1: Backend as Electron Module
+If your backend is also an Electron app, you can directly use the IPC handlers.
+
+### Option 2: Backend as Separate Process
+If your backend is a separate Node.js process, you need to:
+
+1. Start the Electron app with a custom protocol or IPC bridge
+2. Use `electron-ipc` or similar library to communicate
+3. Or create a simple HTTP server in the Electron app that wraps the IPC handlers
+
+## Example: HTTP Bridge (Optional)
+
+If you need HTTP access to sync functionality, you can add a simple HTTP server to the Electron app:
+
+```javascript
+import express from 'express'
+import { ipcMain } from 'electron'
+
+const app = express()
+app.use(express.json())
+
+// HTTP endpoint for sync
+app.post('/api/sync/create-temp-db', async (req, res) => {
+  const result = await ipcMain.invoke('sync:create-temp-db')
+  res.json(result)
+})
+
+// Start server
+app.listen(3000, () => {
+  console.log('Sync API server running on port 3000')
+})
+```
+
+## File Locations
+
+- **Main Database**: `data.db` (unencrypted) or `data.db.enc` (encrypted)
+- **Temporary Sync Directory**: `temp_sync/` (auto-created)
+- **Temp Database Pattern**: `temp_sync/data-{timestamp}.db`
+
+## Error Handling
+
+All handlers return:
+```javascript
+{
+  success: true/false,
+  ...additionalData
+}
+```
+
+If `success` is false, check the `error` property for details.
+
+## Testing
+
+Test the sync handlers:
+
+```javascript
+// In Electron renderer or main process
+const dbInfo = await ipcRenderer.invoke('sync:get-db-info')
+console.log('DB Info:', dbInfo)
+
+const tempDb = await ipcRenderer.invoke('sync:create-temp-db')
+console.log('Temp DB created:', tempDb)
+
+const tables = await ipcRenderer.invoke('sync:get-tables', tempDb.timestamp)
+console.log('Tables:', tables)
+
+await ipcRenderer.invoke('sync:cleanup-temp-db', tempDb.timestamp)
+console.log('Cleanup complete')
+```
+
+## Notes
+
+- The sync handlers use the same encryption key as the main application
+- Temporary files are stored in `temp_sync/` directory in the portable root
+- Always clean up temporary files after sync to avoid disk space issues
+- The system works with both encrypted and unencrypted databases
