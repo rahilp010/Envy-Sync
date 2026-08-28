@@ -5,8 +5,8 @@ import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
 // For Android emulator, use 10.0.2.2 to connect to host's localhost.
 // For iOS simulator/web, localhost works.
 const API_URL = Platform.select({
-  android: 'http://10.236.238.253:8001',
-  default: 'http://10.236.238.253:8001',
+  android: 'https://electron-by-envy.vercel.app/',
+  default: 'https://electron-by-envy.vercel.app/',
 });
 
 // React Native doesn't support process.env directly, use the actual API key

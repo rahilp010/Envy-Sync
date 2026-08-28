@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,75 +8,72 @@ import {
   ActivityIndicator,
   SafeAreaView,
   Animated,
-  Dimensions,
+  Modal,
   RefreshControl,
+  TextInput,
 } from 'react-native';
 import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
 
-const { width, height } = Dimensions.get('window');
-
-// Premium Dark Theme Palette
+// ---------------------------------------------------------------------------
+// Theme — Premium dark palette with depth
+// ---------------------------------------------------------------------------
 const theme = {
-  background: '#000000',
-  cardBg: 'rgba(255, 255, 255, 0.04)',
-  cardBgActive: 'rgba(228, 77, 38, 0.1)',
-  cardBorder: 'rgba(255, 255, 255, 0.05)',
-  textMain: '#FFFFFF',
-  textSub: '#888888',
-  primary: '#E44D26', // Copper/Red accent
-  dataRowBg: 'rgba(20, 20, 20, 0.7)',
-  dataCellBg: 'rgba(255, 255, 255, 0.03)',
+  background: '#0A0A0B',
+  surface: '#121214',
+  surfaceRaised: 'rgba(255, 255, 255, 0.03)',
+  border: 'rgba(255, 255, 255, 0.08)',
+  borderStrong: 'rgba(255, 255, 255, 0.14)',
+  textPrimary: '#F2F2F3',
+  textSecondary: '#8A8A8E',
+  textTertiary: '#5A5A5E',
+  accent: '#E4572E',
+  accentMuted: 'rgba(228, 87, 46, 0.12)',
+  danger: '#FF5A4E',
+};
+
+// UX Helper: Converts raw keys (e.g., 'created_at', 'firstName') to friendly labels ('Created At', 'First Name')
+const formatLabel = (key) => {
+  if (!key) return '';
+  let label = key.replace(/[_-]/g, ' '); // Replace underscores/dashes with spaces
+  label = label.replace(/([a-z])([A-Z])/g, '$1 $2'); // Split camelCase
+  
+  // Capitalize first letter of each word and handle common acronyms
+  return label
+    .split(' ')
+    .map(word => {
+      const lower = word.toLowerCase();
+      if (lower === 'id') return 'ID';
+      if (lower === 'sku') return 'SKU';
+      if (lower === 'url') return 'URL';
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
 };
 
 const DatabaseViewerScreen = () => {
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
   const [tableData, setTableData] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [synced, setSynced] = useState(false);
+  const [detailRow, setDetailRow] = useState(null);
 
-  // Animation values
-  const fadeAnim = React.useRef(new Animated.Value(0)).current;
-  const slideAnim = React.useRef(new Animated.Value(40)).current;
-  const glowAnim = React.useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadDatabase();
-    runAnimations();
   }, []);
 
-  const runAnimations = () => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Subtle background orb breathing animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, {
-          toValue: 1,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowAnim, {
-          toValue: 0,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-  };
+  useEffect(() => {
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 350,
+      useNativeDriver: true,
+    }).start();
+  }, [selectedTable, tableData, searchQuery]);
 
   const loadDatabase = async () => {
     try {
@@ -88,15 +85,15 @@ const DatabaseViewerScreen = () => {
         await syncService.openExistingDatabase();
         dbOpened = true;
       } catch (err) {
-        console.log('No existing DB file, attempting auto-sync:', err.message);
+        console.log('No existing DB file:', err.message);
       }
 
-      if (!dbOpened && !synced) {
-        await syncService.performSync();
-        setSynced(true);
+      if (!dbOpened) {
+        throw new Error(
+          'No database found. Please go to the Sync screen and trigger a synchronization first.',
+        );
       }
 
-      // Get tables
       const tableList = await syncService.getTables();
       setTables(tableList);
 
@@ -117,13 +114,15 @@ const DatabaseViewerScreen = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    setSynced(false);
     await loadDatabase();
     setRefreshing(false);
   };
 
   const handleTableSelect = async tableName => {
+    if (tableName === selectedTable) return;
     setSelectedTable(tableName);
+    setTableData([]);
+    setSearchQuery('');
     try {
       const data = await syncService.getTableData(tableName);
       setTableData(data);
@@ -132,81 +131,144 @@ const DatabaseViewerScreen = () => {
     }
   };
 
-  const renderTableCard = (tableName, index) => {
-    const isSelected = selectedTable === tableName;
-
-    return (
-      <Animated.View
-        key={tableName}
-        style={[
-          styles.tableCard,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-          isSelected && styles.selectedCard,
-        ]}
-      >
-        <TouchableOpacity
-          onPress={() => handleTableSelect(tableName)}
-          style={styles.tableCardButton}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.tableCardText,
-              isSelected && styles.selectedCardText,
-            ]}
-          >
-            {tableName}
-          </Text>
-          <Text style={styles.tableCardCount}>
-            {isSelected ? `${tableData.length} rows` : 'Tap to view'}
-          </Text>
-        </TouchableOpacity>
-      </Animated.View>
+  const filteredData = useMemo(() => {
+    if (!searchQuery.trim()) return tableData;
+    const lowerQuery = searchQuery.toLowerCase();
+    return tableData.filter(row =>
+      Object.values(row).some(
+        val => val !== null && String(val).toLowerCase().includes(lowerQuery)
+      )
     );
-  };
+  }, [tableData, searchQuery]);
 
-  const renderDataRow = (row, index) => {
+  // -- Sub-renders ------------------------------------------------------------
+  const renderTableTabs = () => (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.tabsScroll}
+      contentContainerStyle={styles.tabsContent}
+    >
+      {tables.map(tableName => {
+        const isSelected = selectedTable === tableName;
+        return (
+          <TouchableOpacity
+            key={tableName}
+            onPress={() => handleTableSelect(tableName)}
+            style={[styles.tab, isSelected && styles.tabSelected]}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[styles.tabText, isSelected && styles.tabTextSelected]}
+            >
+              {tableName}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+
+  const renderCard = (row, index) => {
+    const keys = Object.keys(row);
+    const primaryKey = keys[0];
+    const secondaryKeys = keys.slice(1, 4);
+
     return (
-      <Animated.View
+      <TouchableOpacity
         key={index}
-        style={[
-          styles.dataRow,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateX: slideAnim }],
-          },
-        ]}
+        style={styles.card}
+        activeOpacity={0.7}
+        onPress={() => setDetailRow(row)}
       >
-        <View style={styles.rowHeader}>
-          <Text style={styles.rowIndex}>#{index + 1}</Text>
-        </View>
-        <ScrollView
-          style={styles.rowContent}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-        >
-          {Object.entries(row).map(([key, value]) => (
-            <View key={key} style={styles.dataCell}>
-              <Text style={styles.cellKey}>{key}</Text>
-              <Text style={styles.cellValue} numberOfLines={2}>
-                {String(value || 'NULL')}
+        {primaryKey && (
+          <View style={styles.cardHeader}>
+            <View style={styles.primaryHeaderContainer}>
+              <Text style={styles.primaryLabel}>{formatLabel(primaryKey)}</Text>
+              <Text style={styles.cardTitle} numberOfLines={1}>
+                {row[primaryKey] === null ? '—' : String(row[primaryKey])}
               </Text>
             </View>
-          ))}
-        </ScrollView>
-      </Animated.View>
+            <View style={styles.indexBadge}>
+              <Text style={styles.cardIndex}>#{index + 1}</Text>
+            </View>
+          </View>
+        )}
+        
+        <View style={styles.cardBody}>
+          {secondaryKeys.map(key => {
+            const val = row[key];
+            const isNull = val === null || val === undefined || val === '';
+            return (
+              <View key={key} style={styles.fieldRow}>
+                <Text style={styles.fieldLabel} numberOfLines={1}>
+                  {formatLabel(key)}
+                </Text>
+                <Text
+                  style={[styles.fieldValue, isNull && styles.fieldValueNull]}
+                  numberOfLines={1}
+                >
+                  {isNull ? '—' : String(val)}
+                </Text>
+              </View>
+            );
+          })}
+          {keys.length > 4 && (
+            <View style={styles.moreIndicatorRow}>
+               <View style={styles.moreIndicatorLine} />
+               <Text style={styles.moreText}>+ {keys.length - 4} more</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
     );
   };
+
+  const renderDetailModal = () => (
+    <Modal
+      visible={!!detailRow}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setDetailRow(null)}
+    >
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={() => setDetailRow(null)}
+        />
+        <View style={styles.modalSheet}>
+          <View style={styles.modalHandle} />
+          <View style={styles.modalHeaderRow}>
+            <Text style={styles.modalTitle}>{selectedTable} Details</Text>
+            <TouchableOpacity onPress={() => setDetailRow(null)} hitSlop={12}>
+              <Text style={styles.modalClose}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+            {detailRow &&
+              Object.entries(detailRow).map(([key, value]) => (
+                <View key={key} style={styles.modalFieldRow}>
+                  <Text style={styles.modalFieldKey}>{formatLabel(key)}</Text>
+                  <Text style={styles.modalFieldValue} selectable>
+                    {value === null || value === undefined || value === ''
+                      ? 'Not specified'
+                      : String(value)}
+                  </Text>
+                </View>
+              ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={styles.loadingText}>Initializing Link...</Text>
+          <ActivityIndicator size="small" color={theme.accent} />
+          <Text style={styles.loadingText}>Loading database</Text>
         </View>
       </SafeAreaView>
     );
@@ -215,12 +277,13 @@ const DatabaseViewerScreen = () => {
   if (error) {
     const isNoSyncData =
       error.includes('No synced database found') ||
-      error.includes('Database not initialized');
+      error.includes('Database not initialized') ||
+      error.includes('No database found');
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContainer}>
           <Text style={styles.errorTitle}>
-            {isNoSyncData ? 'No Synced Data' : 'Connection Error'}
+            {isNoSyncData ? 'No synced data' : 'Connection error'}
           </Text>
           <Text style={styles.errorText}>
             {isNoSyncData
@@ -229,10 +292,8 @@ const DatabaseViewerScreen = () => {
                 } yet.`
               : error}
           </Text>
-          <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
-            <Text style={styles.retryButtonText}>
-              {isNoSyncData ? 'Sync Device Now' : 'Retry Connection'}
-            </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={onRefresh} activeOpacity={0.8}>
+            <Text style={styles.retryButtonText}>{isNoSyncData ? 'Sync device' : 'Retry'}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -241,70 +302,67 @@ const DatabaseViewerScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Ambient Abstract Glow */}
-      <Animated.View
-        style={[
-          styles.topOrb,
-          {
-            opacity: glowAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0.03, 0.08],
-            }),
-          },
-        ]}
-      />
-
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Database Viewer</Text>
+        <Text style={styles.headerTitle}>Database</Text>
         <Text style={styles.headerSubtitle}>
-          {syncService.getSelectedDevice()?.name || 'Device'} • {tables.length}{' '}
-          tables
+          {syncService.getSelectedDevice()?.name || 'Device'} · {tables.length}{' '}
+          {tables.length === 1 ? 'table' : 'tables'}
         </Text>
       </View>
 
+      {tables.length > 0 && renderTableTabs()}
+
+      {selectedTable && (
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder={`Search in ${selectedTable}...`}
+            placeholderTextColor={theme.textTertiary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCorrect={false}
+          />
+        </View>
+      )}
+
+      {selectedTable && (
+        <View style={styles.recordCountRow}>
+          <Text style={styles.recordCountText}>
+            {filteredData.length} {filteredData.length === 1 ? 'record' : 'records'}
+          </Text>
+        </View>
+      )}
+
       <ScrollView
         style={styles.content}
-        contentContainerStyle={{ paddingBottom: 120 }} // Extra padding for dock
+        contentContainerStyle={styles.contentContainer}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={theme.primary}
-            colors={[theme.primary]}
+            tintColor={theme.accent}
+            colors={[theme.accent]}
           />
         }
       >
-        {/* Tables Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Available Entities</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.tablesScroll}
-          >
-            {tables.map((table, index) => renderTableCard(table, index))}
-          </ScrollView>
-        </View>
-
-        {/* Data Section */}
-        {selectedTable && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              {selectedTable} Records{' '}
-              <Text style={styles.recordCount}>({tableData.length})</Text>
-            </Text>
-            {tableData.length > 0 ? (
-              tableData.map((row, index) => renderDataRow(row, index))
-            ) : (
-              <View style={styles.emptyStateContainer}>
-                <Text style={styles.noDataText}>
-                  No records found in this entity.
-                </Text>
-              </View>
-            )}
+        {selectedTable ? (
+          filteredData.length > 0 ? (
+            <Animated.View style={{ opacity: fadeAnim, gap: 14 }}>
+              {filteredData.map((row, index) => renderCard(row, index))}
+            </Animated.View>
+          ) : (
+            <View style={styles.emptyStateContainer}>
+              <Text style={styles.noDataText}>No records found.</Text>
+            </View>
+          )
+        ) : (
+          <View style={styles.emptyStateContainer}>
+            <Text style={styles.noDataText}>No tables available.</Text>
           </View>
         )}
       </ScrollView>
+
+      {renderDetailModal()}
     </SafeAreaView>
   );
 };
@@ -314,178 +372,294 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.background,
   },
-  topOrb: {
-    position: 'absolute',
-    top: -150,
-    right: -100,
-    width: 400,
-    height: 400,
-    borderRadius: 200,
-    backgroundColor: theme.primary,
-  },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
   },
   header: {
-    padding: 24,
-    paddingTop: 40,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '700',
-    color: theme.textMain,
-    letterSpacing: 0.5,
-    marginBottom: 6,
+    color: theme.textPrimary,
+    letterSpacing: -0.3,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: theme.textSub,
-    letterSpacing: 0.5,
+    color: theme.textSecondary,
+    marginTop: 2,
+  },
+  tabsScroll: {
+    flexGrow: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.border,
+  },
+  tabsContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  tab: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: theme.surface,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  tabSelected: {
+    backgroundColor: theme.accentMuted,
+    borderColor: theme.accent,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: theme.textSecondary,
+  },
+  tabTextSelected: {
+    color: theme.accent,
+    fontWeight: '600',
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  searchInput: {
+    backgroundColor: theme.surface,
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 12,
+    color: theme.textPrimary,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+  },
+  recordCountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  recordCountText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.textPrimary,
     textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   content: {
     flex: 1,
-    padding: 20,
   },
-  section: {
-    marginBottom: 32,
+  contentContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 40,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.textMain,
+  
+  // Refined Card UI
+  card: {
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.border,
+    padding: 16,
+    overflow: 'hidden',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: 16,
-    letterSpacing: 0.5,
   },
-  recordCount: {
-    color: theme.textSub,
+  primaryHeaderContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
+  primaryLabel: {
+    fontSize: 11,
+    color: theme.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  cardTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: theme.textPrimary,
+  },
+  indexBadge: {
+    backgroundColor: theme.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  cardIndex: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '600',
+  },
+  cardBody: {
+    gap: 12,
+  },
+  fieldRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  fieldLabel: {
+    width: 120, // Increased width for formatted labels
+    fontSize: 13,
+    color: theme.textSecondary,
+    fontWeight: '500',
+  },
+  fieldValue: {
+    flex: 1,
+    fontSize: 13,
+    color: theme.textPrimary,
+    fontWeight: '500',
+  },
+  fieldValueNull: {
+    color: theme.textTertiary,
+    fontStyle: 'italic',
     fontWeight: '400',
   },
-  tablesScroll: {
+  moreIndicatorRow: {
     flexDirection: 'row',
-    paddingBottom: 8, // Space for shadow
-  },
-  tableCard: {
-    width: 140,
-    height: 90,
-    backgroundColor: theme.cardBg,
-    borderRadius: 20,
-    marginRight: 16,
-    borderWidth: 1,
-    borderColor: theme.cardBorder,
-  },
-  selectedCard: {
-    borderColor: theme.primary,
-    backgroundColor: theme.cardBgActive,
-  },
-  tableCardButton: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    marginTop: 4,
   },
-  tableCardText: {
-    fontSize: 15,
+  moreIndicatorLine: {
+    height: 1,
+    flex: 1,
+    backgroundColor: theme.border,
+    marginRight: 12,
+  },
+  moreText: {
+    fontSize: 11,
+    color: theme.accent,
     fontWeight: '600',
-    color: theme.textSub,
-    marginBottom: 6,
-  },
-  selectedCardText: {
-    color: theme.primary,
-  },
-  tableCardCount: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.4)',
-  },
-  dataRow: {
-    backgroundColor: theme.dataRowBg,
-    borderRadius: 16,
-    marginBottom: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: theme.cardBorder,
-  },
-  rowHeader: {
-    marginBottom: 12,
-  },
-  rowIndex: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.primary,
-    letterSpacing: 1,
-  },
-  rowContent: {
-    flexDirection: 'row',
-  },
-  dataCell: {
-    minWidth: 110,
-    marginRight: 16,
-    padding: 12,
-    backgroundColor: theme.dataCellBg,
-    borderRadius: 12,
-  },
-  cellKey: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: theme.textSub,
-    marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  cellValue: {
-    fontSize: 14,
-    color: theme.textMain,
-    fontWeight: '400',
-  },
+
+  // Empty / loading / error
   loadingText: {
-    fontSize: 14,
-    color: theme.textSub,
-    marginTop: 16,
-    letterSpacing: 1,
+    fontSize: 13,
+    color: theme.textSecondary,
+    marginTop: 12,
   },
   errorTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FF453A',
-    marginBottom: 8,
+    fontSize: 17,
+    fontWeight: '700',
+    color: theme.danger,
+    marginBottom: 6,
   },
   errorText: {
-    fontSize: 14,
-    color: theme.textSub,
+    fontSize: 13,
+    color: theme.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
+    marginBottom: 20,
+    lineHeight: 19,
   },
   retryButton: {
-    backgroundColor: theme.cardBg,
+    backgroundColor: theme.surface,
     borderWidth: 1,
-    borderColor: theme.cardBorder,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 24,
+    borderColor: theme.border,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 8,
   },
   retryButtonText: {
-    color: theme.textMain,
-    fontSize: 14,
+    color: theme.textPrimary,
+    fontSize: 13,
     fontWeight: '600',
   },
   emptyStateContainer: {
-    padding: 40,
+    padding: 32,
     alignItems: 'center',
-    backgroundColor: theme.cardBg,
+    backgroundColor: theme.surface,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: theme.cardBorder,
+    borderColor: theme.border,
+    marginTop: 8,
   },
   noDataText: {
+    fontSize: 13,
+    color: theme.textSecondary,
+  },
+
+  // Modal UI (Refined for formatted labels)
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  modalSheet: {
+    backgroundColor: '#18181B',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderBottomWidth: 0,
+    maxHeight: '85%',
+    paddingTop: 12,
+    paddingHorizontal: 24,
+    paddingBottom: 32,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.borderStrong,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.textPrimary,
+  },
+  modalClose: {
     fontSize: 14,
-    color: theme.textSub,
-    textAlign: 'center',
+    fontWeight: '600',
+    color: theme.accent,
+  },
+  modalBody: {
+    maxHeight: 500,
+  },
+  modalFieldRow: {
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.border,
+  },
+  modalFieldKey: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.textSecondary,
+    marginBottom: 6,
+  },
+  modalFieldValue: {
+    fontSize: 15,
+    color: theme.textPrimary,
+    lineHeight: 22,
   },
 });
 

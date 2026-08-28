@@ -27,6 +27,8 @@ const theme = {
 export const SyncScreen = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Ready to securely sync');
+  const [lastSyncTime, setLastSyncTime] = useState('Never synced');
+  const [dbVersion, setDbVersion] = useState(null);
 
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
@@ -44,6 +46,12 @@ export const SyncScreen = () => {
       duration: 1000,
       useNativeDriver: true,
     }).start();
+
+    const loadStats = async () => {
+      await syncService.loadSettings();
+      setLastSyncTime(syncService.formatLastSyncTime());
+    };
+    loadStats();
 
     startIdleBreathing();
   }, []);
@@ -89,16 +97,21 @@ export const SyncScreen = () => {
 
     try {
       await syncService.loadSettings();
-      setStatusMessage('Syncing database...');
-      const result = await syncService.performSync();
+      const result = await syncService.performSync((status) => {
+        setStatusMessage(status);
+      });
       if (result.success) {
-        setStatusMessage('Sync complete');
+        setStatusMessage('Sync Complete');
+        setLastSyncTime('Just now');
+        if (result.version !== undefined) {
+          setDbVersion(result.version);
+        }
       } else {
-        setStatusMessage('Sync failed');
+        setStatusMessage('Sync Failed');
       }
     } catch (err) {
       console.error(err);
-      setStatusMessage(`Sync failed: ${err.message}`);
+      setStatusMessage(`Sync Failed: ${err.message}`);
     } finally {
       setIsSyncing(false);
       
@@ -198,6 +211,12 @@ export const SyncScreen = () => {
         </TouchableOpacity>
 
         <Text style={styles.statusText}>{statusMessage}</Text>
+        {lastSyncTime ? (
+          <Text style={styles.metaText}>Last synced: {lastSyncTime}</Text>
+        ) : null}
+        {dbVersion !== null ? (
+          <Text style={styles.metaText}>Version: {dbVersion}</Text>
+        ) : null}
       </View>
     </Animated.View>
   );
@@ -303,6 +322,14 @@ const styles = StyleSheet.create({
     color: theme.textSub,
     fontSize: 14,
     letterSpacing: 0.5,
+    textAlign: 'center',
+  },
+  metaText: {
+    marginTop: 8,
+    color: theme.textSub,
+    fontSize: 12,
+    letterSpacing: 0.5,
+    textAlign: 'center',
   },
   buttonWrapper: {
     justifyContent: 'center',

@@ -28,18 +28,11 @@ export default function App() {
   useEffect(() => {
     const initSync = async () => {
       await syncService.loadSettings();
-      // If settings was never loaded/saved (first launch), save initial defaults
-      if (!syncService.isConfigured) {
-        await syncService.saveSettings({
-          backendUrl: 'http://10.236.238.253:8001',
-          apiKey: '320e016f7a59776fe9dc4cd36d4cc4594cb859379843a9fcef74de5f005eb5ff',
-        });
-      }
     };
     initSync();
   }, []);
 
-  const handleNavigate = (tab) => {
+  const handleNavigate = tab => {
     setActiveTab(tab);
   };
 
@@ -51,11 +44,11 @@ export default function App() {
         {activeTab === 'sync' && <SyncScreen />}
         {activeTab === 'database' && <DatabaseViewerScreen />}
         {activeTab === 'settings' && <SettingsScreen />}
-        
-        <FloatingDock 
-          items={dockItems} 
-          activeItem={activeTab} 
-          onItemPress={(item) => setActiveTab(item.id)} 
+
+        <FloatingDock
+          items={dockItems}
+          activeItem={activeTab}
+          onItemPress={item => setActiveTab(item.id)}
         />
       </View>
     </SafeAreaProvider>
