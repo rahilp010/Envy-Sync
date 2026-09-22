@@ -12,15 +12,14 @@ import {
 const { width } = Dimensions.get('window');
 
 const theme = {
-  background: '#000000',
-  dockBg: 'rgba(15, 15, 15, 0.85)',
-  dockBorder: 'rgba(255, 255, 255, 0.08)',
-  primary: '#E44D26', // Copper/Red accent
-  primaryGlow: 'rgba(228, 77, 38, 0.15)',
-  textSub: '#666666',
+  dockBg: 'rgba(36, 36, 45, 0.85)', // Matches #24242d with opacity
+  dockBorder: 'rgba(255, 255, 255, 0.1)',
+  primary: '#daf4aa',
+  primaryGlow: 'rgba(218, 244, 170, 0.15)',
+  textSub: '#9ca3af',
 };
 
-const FloatingDock = ({ items, onItemPress, activeItem }) => {
+const FloatingDock = React.memo(({ items, onItemPress, activeItem }) => {
   // Scale animations for individual items
   const [scaleAnims] = useState(items.map(() => new Animated.Value(1)));
 
@@ -43,11 +42,12 @@ const FloatingDock = ({ items, onItemPress, activeItem }) => {
         useNativeDriver: true,
       }),
     ]).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handlePressIn = index => {
     Animated.spring(scaleAnims[index], {
-      toValue: 1.15, // Refined scale for a professional, weighty feel
+      toValue: 1.15,
       friction: 5,
       tension: 120,
       useNativeDriver: true,
@@ -109,7 +109,7 @@ const FloatingDock = ({ items, onItemPress, activeItem }) => {
       </View>
     </Animated.View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -130,7 +130,6 @@ const styles = StyleSheet.create({
     borderColor: theme.dockBorder,
     justifyContent: 'space-between',
     width: width * 0.85,
-    // Deep premium shadow
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.6,

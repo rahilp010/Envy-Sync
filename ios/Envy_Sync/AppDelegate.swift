@@ -24,7 +24,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     window = UIWindow(frame: UIScreen.main.bounds)
 
     factory.startReactNative(
-      withModuleName: "Envy_Sync",
+      withModuleName: "Envy",
       in: window,
       launchOptions: launchOptions
     )

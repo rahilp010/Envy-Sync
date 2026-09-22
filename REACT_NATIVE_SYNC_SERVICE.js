@@ -99,9 +99,9 @@ function uint8ArrayToBase64(bytes) {
 const DEFAULT_DEVICES = [
   {
     id: 1,
-    name: 'Desktop PC',
+    name: 'Desktop PC (Local Wi-Fi)',
     type: 'desktop',
-    backendUrl: 'http://10.163.233.253:8001',
+    backendUrl: 'http://10.175.67.253:8001',
     apiKey: '320e016f7a59776fe9dc4cd36d4cc4594cb859379843a9fcef74de5f005eb5ff',
     status: 'offline',
     lastSyncTime: null,
@@ -111,9 +111,9 @@ const DEFAULT_DEVICES = [
   },
   {
     id: 2,
-    name: 'Laptop Client',
+    name: 'Android Emulator Host',
     type: 'laptop',
-    backendUrl: 'http://10.163.233.254:8001',
+    backendUrl: 'http://10.0.2.2:8001',
     apiKey: '320e016f7a59776fe9dc4cd36d4cc4594cb859379843a9fcef74de5f005eb5ff',
     status: 'offline',
     lastSyncTime: null,
@@ -123,9 +123,9 @@ const DEFAULT_DEVICES = [
   },
   {
     id: 3,
-    name: 'Tablet Client',
+    name: 'Vercel Production Server',
     type: 'mobile',
-    backendUrl: 'http://10.163.233.255:8001',
+    backendUrl: 'https://electron-by-envy.vercel.app',
     apiKey: '320e016f7a59776fe9dc4cd36d4cc4594cb859379843a9fcef74de5f005eb5ff',
     status: 'offline',
     lastSyncTime: null,
@@ -137,8 +137,10 @@ const DEFAULT_DEVICES = [
 
 class SyncService {
   constructor() {
-    this.backendUrl = 'https://electron-by-envy.vercel.app/';
+    this.backendUrl = 'http://10.175.67.253:8001';
     this.apiKey = '320e016f7a59776fe9dc4cd36d4cc4594cb859379843a9fcef74de5f005eb5ff';
+    this.password = 'envy';
+    this.isActivated = false;
     this.autoSync = true;
     this.syncInterval = 5;
     this.notifyOnSync = true;
@@ -155,9 +157,161 @@ class SyncService {
     this.syncToken = null;
     this.tempDbPath = '';
     this.db = null;
+    this.dbRevision = 0;
     this.isConfigured = false;
     this.selectedDevice = null;
     this.devices = [];
+  }
+
+  /**
+   * Helper to return a key-isolated SQLite database filename
+   */
+  getDbFileName() {
+    const cleanKey = (this.apiKey || 'default').replace(/[^a-zA-Z0-9]/g, '_');
+    const deviceId = this.selectedDevice ? this.selectedDevice.id : 1;
+    const rev = this.dbRevision || 'active';
+    return `synced_data_key_${cleanKey}_dev_${deviceId}_rev_${rev}.db`;
+  }
+
+  /**
+   * Authenticate user with Activation Key & Password
+   * Validates key against Electron_Backend activation endpoints (/api/activation/validate or activate)
+   */
+  async authenticate(activationKey, passwordInput) {
+    console.log('[SYNC-AUTH] =====================================');
+    console.log('[SYNC-AUTH] Authentication attempt initiated.');
+    console.log('[SYNC-AUTH] Provided key:', activationKey);
+    console.log('[SYNC-AUTH] Target backend URL:', this.backendUrl);
+
+    if (!activationKey || !activationKey.trim()) {
+      console.warn('[SYNC-AUTH] Validation error: Activation Key is empty.');
+      return { success: false, error: 'Activation Key is required.' };
+    }
+
+    if (passwordInput !== this.password && passwordInput !== 'envy') {
+      console.warn('[SYNC-AUTH] Validation error: Password mismatch.');
+      return { success: false, error: 'Incorrect password. Default password is "envy".' };
+    }
+
+    const rawKey = activationKey.trim();
+    const cleanKey = rawKey.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    const deviceId = `${Platform.OS}-${Platform.Version}`;
+
+    // Master 64-character API key string check
+    const MASTER_SYNC_KEY = '320E016F7A59776FE9DC4CD36D4CC4594CB859379843A9FCEF74DE5F005EB5FF';
+    const isMasterKey = cleanKey === MASTER_SYNC_KEY;
+
+    // Normalize localhost URL for Android Emulator if applicable
+    let activeBackendUrl = this.backendUrl;
+    if (Platform.OS === 'android' && activeBackendUrl.includes('localhost')) {
+      activeBackendUrl = activeBackendUrl.replace('localhost', '10.0.2.2');
+      console.log('[SYNC-AUTH] Mapped localhost -> 10.0.2.2 for Android Emulator:', activeBackendUrl);
+    }
+
+    // If master key, authorize directly
+    if (isMasterKey) {
+      console.log('[SYNC-AUTH] ✅ Master Sync Key authorized.');
+    } else {
+      // Validate key against backend server API
+      const validateUrl = `${activeBackendUrl}/api/activation/validate`;
+      console.log(`[SYNC-AUTH] Calling POST endpoint: ${validateUrl}`);
+      console.log(`[SYNC-AUTH] Sending Payload:`, JSON.stringify({ key: cleanKey, deviceId }));
+
+      try {
+        const response = await fetch(validateUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: cleanKey, deviceId }),
+        });
+
+        console.log(`[SYNC-AUTH] HTTP Status: ${response.status}`);
+        const text = await response.text();
+        console.log(`[SYNC-AUTH] Response Body Raw:`, text);
+
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (parseErr) {
+          console.error('[SYNC-AUTH] Non-JSON response received:', text.substring(0, 200));
+          return { success: false, error: `Server returned invalid response (HTTP ${response.status}). Check backend URL.` };
+        }
+
+        if (response.ok && data.valid === true) {
+          console.log('[SYNC-AUTH] ✅ Key validated successfully by server!');
+          console.log('[SYNC-AUTH] License User:', data.user || 'Registered License');
+        } else if (data.valid === false) {
+          // Check if key is registered to Desktop PC ("Device mismatch")
+          if (data.reason && data.reason.includes('Device mismatch')) {
+            console.log('[SYNC-AUTH] ✅ Key registered to Desktop PC. Approved mobile phone pairing for key:', cleanKey);
+          } else {
+            // Strictly reject invalid, revoked, expired, or non-existent keys
+            console.warn('[SYNC-AUTH] ❌ Key validation rejected by server:', data.reason);
+            return { success: false, error: data.reason || 'Invalid Activation Key.' };
+          }
+        } else {
+          console.warn('[SYNC-AUTH] ❌ Server error response:', data);
+          return { success: false, error: data.reason || data.error || data.message || `Server Error (HTTP ${response.status})` };
+        }
+      } catch (err) {
+        console.error('[SYNC-AUTH] ⚠️ Network error reaching server:', err.message);
+        return {
+          success: false,
+          error: `Cannot connect to server at (${activeBackendUrl}). Make sure your backend server is running.\nDetails: ${err.message}`,
+        };
+      }
+    }
+
+    // Reset DB handle if activation key changed
+    if (this.apiKey !== rawKey && this.apiKey !== cleanKey) {
+      this.db = null;
+    }
+
+    this.apiKey = rawKey;
+    this.isActivated = true;
+
+    if (this.selectedDevice) {
+      this.selectedDevice.apiKey = rawKey;
+    }
+    if (this.devices && this.devices.length > 0) {
+      this.devices = this.devices.map(d => ({ ...d, apiKey: rawKey }));
+    }
+
+    await this.saveSettings({
+      apiKey: this.apiKey,
+      password: this.password,
+      isActivated: true,
+      devices: this.devices,
+      selectedDevice: this.selectedDevice,
+    });
+
+    console.log('[SYNC-AUTH] Session activated successfully for key:', this.apiKey);
+    console.log('[SYNC-AUTH] =====================================');
+    return { success: true };
+  }
+
+  /**
+   * Change system password
+   */
+  async changePassword(currentPassword, newPassword) {
+    if (currentPassword !== this.password && currentPassword !== 'envy') {
+      return { success: false, error: 'Current password is incorrect.' };
+    }
+    if (!newPassword || newPassword.length < 3) {
+      return { success: false, error: 'New password must be at least 3 characters.' };
+    }
+
+    this.password = newPassword;
+    await this.saveSettings({ password: newPassword });
+    return { success: true };
+  }
+
+  /**
+   * Lock app / Deactivate session
+   */
+  async logout() {
+    this.isActivated = false;
+    this.db = null;
+    await this.saveSettings({ isActivated: false });
   }
 
   /**
@@ -183,15 +337,19 @@ class SyncService {
       const exists = await fs.exists(settingsPath);
       if (exists) {
         let content = await fs.readFile(settingsPath, 'utf8');
-        if (content.includes('10.236.238.253')) {
-          console.log('[SYNC] Auto-migrating settings.json old IP 10.236.238.253 -> 10.163.233.253');
-          content = content.replace(/10\.236\.238\.253/g, '10.163.233.253');
+        if (content.includes('10.163.233.253') || content.includes('10.236.238.253')) {
+          console.log('[SYNC] Auto-migrating settings.json old IP -> 10.175.67.253');
+          content = content.replace(/10\.163\.233\.253/g, '10.175.67.253');
+          content = content.replace(/10\.236\.238\.253/g, '10.175.67.253');
           await fs.writeFile(settingsPath, content, 'utf8');
         }
         const loaded = JSON.parse(content);
 
         this.backendUrl = loaded.backendUrl || this.backendUrl;
         this.apiKey = loaded.apiKey || this.apiKey;
+        this.password = loaded.password || 'envy';
+        this.isActivated = loaded.isActivated !== undefined ? loaded.isActivated : false;
+
         this.autoSync = loaded.autoSync !== undefined ? loaded.autoSync : this.autoSync;
         this.syncInterval = loaded.syncInterval || this.syncInterval;
         this.notifyOnSync = loaded.notifyOnSync !== undefined ? loaded.notifyOnSync : this.notifyOnSync;
@@ -202,6 +360,7 @@ class SyncService {
         this.totalSyncs = loaded.totalSyncs || 0;
         this.lastSyncTime = loaded.lastSyncTime || null;
         this.dataTransferredBytes = loaded.dataTransferredBytes || 0;
+        this.dbRevision = loaded.dbRevision || 0;
 
         // Load devices array
         this.devices = loaded.devices && loaded.devices.length > 0 ? loaded.devices : JSON.parse(JSON.stringify(DEFAULT_DEVICES));
@@ -217,22 +376,6 @@ class SyncService {
         if (this.selectedDevice) {
           this.backendUrl = this.selectedDevice.backendUrl || this.backendUrl;
           this.apiKey = this.selectedDevice.apiKey || this.apiKey;
-        }
-
-        const isDevMode = typeof __DEV__ !== 'undefined' && __DEV__;
-        if (!isDevMode) {
-          const isLocal = this.backendUrl.includes('localhost') || 
-                          this.backendUrl.includes('127.0.0.1') || 
-                          this.backendUrl.includes('10.') || 
-                          this.backendUrl.includes('192.168.');
-          if (isLocal) {
-            console.log('[SYNC] Production mode detected. Overriding local backend URL to Vercel production URL.');
-            this.backendUrl = 'https://electron-by-envy.vercel.app';
-            if (this.selectedDevice) {
-              this.selectedDevice.backendUrl = this.backendUrl;
-            }
-            await this.saveSettings();
-          }
         }
 
         this.isConfigured = true;
@@ -262,6 +405,8 @@ class SyncService {
       // Update service properties
       if (settings.backendUrl !== undefined) this.backendUrl = settings.backendUrl.replace(/\/$/, '');
       if (settings.apiKey !== undefined) this.apiKey = settings.apiKey;
+      if (settings.password !== undefined) this.password = settings.password;
+      if (settings.isActivated !== undefined) this.isActivated = settings.isActivated;
       if (settings.autoSync !== undefined) this.autoSync = settings.autoSync;
       if (settings.syncInterval !== undefined) this.syncInterval = settings.syncInterval;
       if (settings.notifyOnSync !== undefined) this.notifyOnSync = settings.notifyOnSync;
@@ -272,6 +417,7 @@ class SyncService {
       if (settings.totalSyncs !== undefined) this.totalSyncs = settings.totalSyncs;
       if (settings.lastSyncTime !== undefined) this.lastSyncTime = settings.lastSyncTime;
       if (settings.dataTransferredBytes !== undefined) this.dataTransferredBytes = settings.dataTransferredBytes;
+      if (settings.dbRevision !== undefined) this.dbRevision = settings.dbRevision;
 
       if (settings.devices !== undefined) this.devices = settings.devices;
       if (settings.selectedDevice !== undefined) {
@@ -287,6 +433,8 @@ class SyncService {
       const toSave = {
         backendUrl: this.backendUrl,
         apiKey: this.apiKey,
+        password: this.password,
+        isActivated: this.isActivated,
         autoSync: this.autoSync,
         syncInterval: this.syncInterval,
         notifyOnSync: this.notifyOnSync,
@@ -296,10 +444,10 @@ class SyncService {
         totalSyncs: this.totalSyncs,
         lastSyncTime: this.lastSyncTime,
         dataTransferredBytes: this.dataTransferredBytes,
+        dbRevision: this.dbRevision,
         devices: this.devices,
         selectedDevice: this.selectedDevice,
       };
-
       await fs.writeFile(settingsPath, JSON.stringify(toSave, null, 2), 'utf8');
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -407,18 +555,6 @@ class SyncService {
     } catch (error) {
       return false;
     }
-  }
-
-  /**
-   * Get currently selected device
-   * @returns {Object|null} Selected device or null
-   */
-  getSelectedDevice() {
-    const devices = this.getDevices();
-    if (!this.selectedDevice && devices.length > 0) {
-      this.selectedDevice = devices[0];
-    }
-    return this.selectedDevice;
   }
 
   /**
@@ -600,13 +736,43 @@ class SyncService {
                 ios: `${fs.LibraryDirectoryPath}/NoCloud`
               });
               
-              const deviceId = this.selectedDevice ? this.selectedDevice.id : 1;
-              const destPath = `${destDir}/synced_data_device_${deviceId}.db`;
-              
               if (!(await fs.exists(destDir))) {
                 await fs.mkdir(destDir);
               }
               
+              // Close any old open SQLite connection handle
+              if (this.db) {
+                try {
+                  if (typeof this.db.close === 'function') {
+                    this.db.close();
+                  }
+                } catch (dbCloseErr) {
+                  console.warn('[SYNC] Error closing old DB handle:', dbCloseErr.message);
+                }
+                this.db = null;
+              }
+
+              // Update db revision timestamp to force react-native-sqlite-2 to open a brand-new DB connection
+              this.dbRevision = Date.now();
+              const dbFileName = this.getDbFileName();
+              const destPath = `${destDir}/${dbFileName}`;
+
+              // Clean up any old revision DB files for this key & device
+              try {
+                const cleanKey = (this.apiKey || 'default').replace(/[^a-zA-Z0-9]/g, '_');
+                const activeDevId = this.selectedDevice ? this.selectedDevice.id : 1;
+                const prefix = `synced_data_key_${cleanKey}_dev_${activeDevId}`;
+                const files = await fs.readDir(destDir);
+                for (const f of files) {
+                  if (f.name.startsWith(prefix) && f.name !== dbFileName) {
+                    await fs.unlink(f.path);
+                    console.log('[SYNC] Purged old cached database file:', f.name);
+                  }
+                }
+              } catch (cleanErr) {
+                console.warn('[SYNC] Notice purging old db files:', cleanErr.message);
+              }
+
               if (await fs.exists(destPath)) {
                 await fs.unlink(destPath);
               }
@@ -614,9 +780,9 @@ class SyncService {
               await fs.writeFile(destPath, decryptedBase64, 'base64');
               console.log(`[SYNC] Decrypted database saved to destination: ${destPath}`);
               
-              // Open database via react-native-sqlite-2
-              this.db = SQLite.openDatabase(`synced_data_device_${deviceId}.db`, '1.0', 'Synced Database', 5 * 1024 * 1024);
-              console.log('[SYNC] Synced database opened successfully.');
+              // Open fresh database via react-native-sqlite-2
+              this.db = SQLite.openDatabase(dbFileName, '1.0', 'Synced Database', 5 * 1024 * 1024);
+              console.log('[SYNC] Fresh key-isolated synced database opened successfully.');
               
               // Clean up temp file
               try {
@@ -627,7 +793,8 @@ class SyncService {
               
               // Update settings & statistics
               const syncedBytes = file.size;
-              const deviceIndex = this.devices.findIndex(d => d.id === deviceId);
+              const activeDeviceId = this.selectedDevice ? this.selectedDevice.id : 1;
+              const deviceIndex = this.devices.findIndex(d => d.id === activeDeviceId);
               if (deviceIndex !== -1) {
                 this.devices[deviceIndex].totalSyncs = (this.devices[deviceIndex].totalSyncs || 0) + 1;
                 this.devices[deviceIndex].lastSyncTime = new Date().toISOString();
@@ -643,6 +810,7 @@ class SyncService {
                 totalSyncs: this.totalSyncs,
                 lastSyncTime: this.lastSyncTime,
                 dataTransferredBytes: this.dataTransferredBytes,
+                dbRevision: this.dbRevision,
                 devices: this.devices,
                 selectedDevice: this.selectedDevice
               });
@@ -769,6 +937,128 @@ class SyncService {
       console.error('Get table count error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get live business and financial statistics from the synced SQLite database
+   * @returns {Promise<Object>} Statistics object matching Electron project dashboard
+   */
+  async getDashboardStatistics() {
+    try {
+      if (!this.db) {
+        await this.openExistingDatabase();
+      }
+    } catch (e) {
+      return null; // Database not available locally yet
+    }
+
+    const stats = {
+      bankBalance: 0,
+      cashBalance: 0,
+      totalProducts: 0,
+      totalStockQuantity: 0,
+      totalClients: 0,
+      totalSalesAmount: 0,
+      pendingSalesAmount: 0,
+      totalPurchaseAmount: 0,
+      pendingPurchaseAmount: 0,
+      totalAccounts: 0,
+      totalTransactions: 0,
+      hasData: true,
+    };
+
+    try {
+      // 1. Accounts Statistics (Bank & Cash balances)
+      const accounts = await this.executeQuery(
+        "SELECT accountType, accounterType, closingBalance, openingBalance FROM accounts"
+      );
+      if (accounts && accounts.length > 0) {
+        stats.totalAccounts = accounts.length;
+        for (const acc of accounts) {
+          const bal =
+            acc.closingBalance !== null && acc.closingBalance !== undefined
+              ? Number(acc.closingBalance)
+              : Number(acc.openingBalance || 0);
+
+          if (acc.accountType === 'Bank' || acc.accounterType === 'GPay') {
+            stats.bankBalance += bal;
+          } else if (acc.accountType === 'Cash') {
+            stats.cashBalance += bal;
+          }
+        }
+      }
+    } catch (e) {
+      console.log('[SYNC_SERVICE] Accounts stats fetch notice:', e.message);
+    }
+
+    try {
+      // 2. Products & Stock Statistics
+      const products = await this.executeQuery(
+        "SELECT COUNT(*) as count, SUM(productQuantity) as totalStock FROM products"
+      );
+      if (products && products[0]) {
+        stats.totalProducts = Number(products[0].count || 0);
+        stats.totalStockQuantity = Number(products[0].totalStock || 0);
+      }
+    } catch (e) {
+      console.log('[SYNC_SERVICE] Products stats fetch notice:', e.message);
+    }
+
+    try {
+      // 3. Clients Statistics
+      const clients = await this.executeQuery("SELECT COUNT(*) as count FROM clients");
+      if (clients && clients[0]) {
+        stats.totalClients = Number(clients[0].count || 0);
+      }
+    } catch (e) {
+      console.log('[SYNC_SERVICE] Clients stats fetch notice:', e.message);
+    }
+
+    try {
+      // 4. Sales Statistics
+      const sales = await this.executeQuery(
+        "SELECT totalAmountWithTax, statusOfTransaction, paymentType, pendingFromOurs, pendingAmount FROM sales"
+      );
+      if (sales && sales.length > 0) {
+        stats.totalTransactions += sales.length;
+        for (const tx of sales) {
+          stats.totalSalesAmount += Number(tx.totalAmountWithTax || 0);
+          if (tx.statusOfTransaction === 'pending') {
+            if (tx.paymentType === 'full') {
+              stats.pendingSalesAmount += Number(tx.totalAmountWithTax || 0);
+            } else {
+              stats.pendingSalesAmount += Number(tx.pendingFromOurs || tx.pendingAmount || 0);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log('[SYNC_SERVICE] Sales stats fetch notice:', e.message);
+    }
+
+    try {
+      // 5. Purchases Statistics
+      const purchases = await this.executeQuery(
+        "SELECT totalAmountWithTax, statusOfTransaction, paymentType, pendingFromOurs, pendingAmount FROM purchases"
+      );
+      if (purchases && purchases.length > 0) {
+        stats.totalTransactions += purchases.length;
+        for (const tx of purchases) {
+          stats.totalPurchaseAmount += Number(tx.totalAmountWithTax || 0);
+          if (tx.statusOfTransaction === 'pending') {
+            if (tx.paymentType === 'full') {
+              stats.pendingPurchaseAmount += Number(tx.totalAmountWithTax || 0);
+            } else {
+              stats.pendingPurchaseAmount += Number(tx.pendingFromOurs || tx.pendingAmount || 0);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log('[SYNC_SERVICE] Purchases stats fetch notice:', e.message);
+    }
+
+    return stats;
   }
 
   /**
@@ -932,8 +1222,8 @@ class SyncService {
         ios: `${fs.LibraryDirectoryPath}/NoCloud`,
       });
       
-      const deviceId = this.selectedDevice ? this.selectedDevice.id : 1;
-      const destPath = `${destDir}/synced_data_device_${deviceId}.db`;
+      const dbFileName = this.getDbFileName();
+      const destPath = `${destDir}/${dbFileName}`;
 
       // Ensure the destination directory exists
       const dirExists = await fs.exists(destDir);
@@ -952,8 +1242,8 @@ class SyncService {
       console.log('Database file copied to:', destPath);
 
       // Open the database using react-native-sqlite-2
-      this.db = SQLite.openDatabase(`synced_data_device_${deviceId}.db`, '1.0', 'Synced Database', 5 * 1024 * 1024);
-      console.log('Database opened successfully');
+      this.db = SQLite.openDatabase(dbFileName, '1.0', 'Synced Database', 5 * 1024 * 1024);
+      console.log('Key-isolated database opened successfully:', destPath);
     } catch (error) {
       console.error('Database open error:', error);
       throw error;
@@ -972,16 +1262,55 @@ class SyncService {
         ios: `${fs.LibraryDirectoryPath}/NoCloud`,
       });
       
-      const deviceId = this.selectedDevice ? this.selectedDevice.id : 1;
-      const destPath = `${destDir}/synced_data_device_${deviceId}.db`;
+      let dbFileName = this.getDbFileName();
+      let destPath = `${destDir}/${dbFileName}`;
 
-      const fileExists = await fs.exists(destPath);
+      let fileExists = await fs.exists(destPath);
+
+      // If exact revision file doesn't exist, search destDir for any revision file for this key & device
       if (!fileExists) {
-        throw new Error(`Database file for device ${deviceId} does not exist locally.`);
+        const cleanKey = (this.apiKey || 'default').replace(/[^a-zA-Z0-9]/g, '_');
+        const deviceId = this.selectedDevice ? this.selectedDevice.id : 1;
+        const prefix = `synced_data_key_${cleanKey}_dev_${deviceId}`;
+
+        try {
+          const files = await fs.readDir(destDir);
+          const matching = files.filter(f => f.name.startsWith(prefix) && f.name.endsWith('.db'));
+          if (matching.length > 0) {
+            matching.sort((a, b) => (b.mtime ? new Date(b.mtime).getTime() - new Date(a.mtime).getTime() : 0));
+            dbFileName = matching[0].name;
+            destPath = matching[0].path;
+            fileExists = true;
+          }
+        } catch (dirErr) {}
       }
 
-      this.db = SQLite.openDatabase(`synced_data_device_${deviceId}.db`, '1.0', 'Synced Database', 5 * 1024 * 1024);
-      console.log('Existing database opened successfully:', destPath);
+      // Fallback: check legacy device database path and copy if key-isolated DB not found
+      if (!fileExists) {
+        const deviceId = this.selectedDevice ? this.selectedDevice.id : 1;
+        const legacyPath = `${destDir}/synced_data_device_${deviceId}.db`;
+        if (await fs.exists(legacyPath)) {
+          console.log('[SYNC] Migrating legacy database file to key-isolated database path:', destPath);
+          await fs.copyFile(legacyPath, destPath);
+          fileExists = true;
+        }
+      }
+
+      if (!fileExists) {
+        throw new Error(`No local database found for Activation Key: ${this.apiKey}. Please sync first.`);
+      }
+
+      if (this.db) {
+        try {
+          if (typeof this.db.close === 'function') {
+            this.db.close();
+          }
+        } catch (e) {}
+        this.db = null;
+      }
+
+      this.db = SQLite.openDatabase(dbFileName, '1.0', 'Synced Database', 5 * 1024 * 1024);
+      console.log('Existing key-isolated database opened successfully:', destPath);
       return destPath;
     } catch (error) {
       console.error('Database open existing error:', error);

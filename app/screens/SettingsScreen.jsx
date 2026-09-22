@@ -14,17 +14,21 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
 
 const theme = {
-  background: '#000000',
-  cardBg: 'rgba(255, 255, 255, 0.04)',
-  cardBorder: 'rgba(255, 255, 255, 0.05)',
-  textMain: '#FFFFFF',
-  textSub: '#888888',
-  primary: '#E44D26', // Copper/Red
-  success: '#30D158',
-  error: '#FF453A',
+  background: '#16161b',
+  cardBg: '#24242d',
+  cardBorder: 'rgba(255, 255, 255, 0.1)',
+  textMain: '#ffffff',
+  textSub: '#9ca3af', // gray-400
+  textMuted: '#6b7280', // gray-500
+  primary: '#daf4aa',
+  primaryText: '#16161b',
+  success: '#34d399', // emerald-400
+  error: '#f87171', // red-400
+  dangerBg: 'rgba(248, 113, 113, 0.1)',
+  dangerBorder: 'rgba(248, 113, 113, 0.2)',
 };
 
-export const SettingsScreen = () => {
+export const SettingsScreen = ({ onLogout }) => {
   const [settings, setSettings] = useState({
     backendUrl: 'https://electron-by-envy.vercel.app/',
     apiKey: '320e016f7a59776fe9dc4cd36d4cc4594cb859379843a9fcef74de5f005eb5ff',
@@ -43,10 +47,34 @@ export const SettingsScreen = () => {
   const [tempDeviceUrl, setTempDeviceUrl] = useState('');
   const [tempDeviceKey, setTempDeviceKey] = useState('');
 
-  const [isEditingUrl, setIsEditingUrl] = useState(false);
-  const [isEditingKey, setIsEditingKey] = useState(false);
-  const [tempUrl, setTempUrl] = useState(settings.backendUrl);
-  const [tempKey, setTempKey] = useState(settings.apiKey);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassInput, setCurrentPassInput] = useState('');
+  const [newPassInput, setNewPassInput] = useState('');
+  const [passError, setPassError] = useState('');
+  const [passSuccess, setPassSuccess] = useState('');
+
+  const handleChangePassword = async () => {
+    setPassError('');
+    setPassSuccess('');
+    if (!currentPassInput || !newPassInput) {
+      setPassError('Please fill out all password fields.');
+      return;
+    }
+    const res = await syncService.changePassword(currentPassInput, newPassInput);
+    if (res.success) {
+      setPassSuccess('Password changed successfully!');
+      setCurrentPassInput('');
+      setNewPassInput('');
+      setTimeout(() => setShowPasswordModal(false), 1200);
+    } else {
+      setPassError(res.error || 'Failed to change password.');
+    }
+  };
+
+  const handleLockApp = async () => {
+    await syncService.logout();
+    if (onLogout) onLogout();
+  };
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
@@ -89,10 +117,9 @@ export const SettingsScreen = () => {
         selectedDevice: syncService.getSelectedDevice(),
       };
       setSettings(currentSettings);
-      setTempUrl(syncService.backendUrl);
-      setTempKey(syncService.apiKey);
     };
     fetchSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const updateSetting = async (key, value) => {
@@ -226,7 +253,7 @@ export const SettingsScreen = () => {
   ) => (
     <View style={styles.settingItem}>
       <View style={styles.settingIconWrapper}>
-        <Ionicons name={iconName} size={22} color={theme.textSub} />
+        <Ionicons name={iconName} size={20} color={theme.textSub} />
       </View>
       <View style={styles.settingLeft}>
         <Text style={styles.settingTitle}>{title}</Text>
@@ -246,10 +273,21 @@ export const SettingsScreen = () => {
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-      {/* Ambient Glow */}
+      {/* Background Ambient Glow */}
       <Animated.View
         style={[
-          styles.topOrb,
+          styles.bgOrb1,
+          {
+            opacity: glowAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.03, 0.08],
+            }),
+          },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.bgOrb2,
           {
             opacity: glowAnim.interpolate({
               inputRange: [0, 1],
@@ -283,18 +321,27 @@ export const SettingsScreen = () => {
                   <View key={device.id} style={styles.deviceItemContainer}>
                     <View style={styles.deviceItemHeader}>
                       <View style={styles.deviceItemLeft}>
-                        <Ionicons
-                          name={
-                            device.type === 'desktop'
-                              ? 'desktop-outline'
-                              : device.type === 'laptop'
-                              ? 'laptop-outline'
-                              : 'tablet-portrait-outline'
-                          }
-                          size={20}
-                          color={isSelected ? theme.primary : theme.textSub}
-                          style={{ marginRight: 12 }}
-                        />
+                        <View
+                          style={[
+                            styles.deviceIconBadge,
+                            isSelected && {
+                              backgroundColor: 'rgba(218, 244, 170, 0.1)',
+                              borderColor: 'rgba(218, 244, 170, 0.2)',
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name={
+                              device.type === 'desktop'
+                                ? 'desktop-outline'
+                                : device.type === 'laptop'
+                                ? 'laptop-outline'
+                                : 'tablet-portrait-outline'
+                            }
+                            size={18}
+                            color={isSelected ? theme.primary : theme.textSub}
+                          />
+                        </View>
                         <View style={{ flex: 1 }}>
                           <Text
                             style={[
@@ -312,6 +359,7 @@ export const SettingsScreen = () => {
 
                       {!isEditing && (
                         <TouchableOpacity
+                          style={styles.editBtn}
                           onPress={() => {
                             setEditingDeviceId(device.id);
                             setTempDeviceName(device.name);
@@ -333,7 +381,7 @@ export const SettingsScreen = () => {
                             value={tempDeviceName}
                             onChangeText={setTempDeviceName}
                             placeholder="e.g. Work Laptop"
-                            placeholderTextColor={theme.textSub}
+                            placeholderTextColor={theme.textMuted}
                           />
                         </View>
                         <View style={styles.formGroup}>
@@ -343,7 +391,7 @@ export const SettingsScreen = () => {
                             value={tempDeviceUrl}
                             onChangeText={setTempDeviceUrl}
                             placeholder="http://..."
-                            placeholderTextColor={theme.textSub}
+                            placeholderTextColor={theme.textMuted}
                             autoCapitalize="none"
                             keyboardType="url"
                           />
@@ -357,7 +405,7 @@ export const SettingsScreen = () => {
                             value={tempDeviceKey}
                             onChangeText={setTempDeviceKey}
                             placeholder="Secret Sync Key"
-                            placeholderTextColor={theme.textSub}
+                            placeholderTextColor={theme.textMuted}
                             autoCapitalize="none"
                             secureTextEntry
                           />
@@ -404,9 +452,7 @@ export const SettingsScreen = () => {
                 color={theme.primary}
                 style={{ marginRight: 8 }}
               />
-              <Text style={styles.testButtonText}>
-                Test Active Device Connection
-              </Text>
+              <Text style={styles.testButtonText}>Test Active Connection</Text>
             </TouchableOpacity>
           </>,
         )}
@@ -426,7 +472,7 @@ export const SettingsScreen = () => {
                   false: 'rgba(255,255,255,0.1)',
                   true: theme.primary,
                 }}
-                thumbColor="#FFFFFF"
+                thumbColor="#16161b"
                 ios_backgroundColor="rgba(255,255,255,0.1)"
               />,
             )}
@@ -434,7 +480,7 @@ export const SettingsScreen = () => {
             {settings.autoSync &&
               renderSettingItem(
                 'Sync Frequency',
-                `${settings.syncInterval} minutes interval`,
+                `${settings.syncInterval} min interval`,
                 'time-outline',
                 <View style={styles.intervalContainer}>
                   <TouchableOpacity
@@ -446,7 +492,7 @@ export const SettingsScreen = () => {
                       )
                     }
                   >
-                    <Ionicons name="remove" size={18} color={theme.textMain} />
+                    <Ionicons name="remove" size={16} color={theme.textMain} />
                   </TouchableOpacity>
                   <Text style={styles.intervalText}>
                     {settings.syncInterval}
@@ -457,14 +503,14 @@ export const SettingsScreen = () => {
                       updateSetting('syncInterval', settings.syncInterval + 1)
                     }
                   >
-                    <Ionicons name="add" size={18} color={theme.textMain} />
+                    <Ionicons name="add" size={16} color={theme.textMain} />
                   </TouchableOpacity>
                 </View>,
               )}
 
             {renderSettingItem(
               'Push Notifications',
-              'Alerts upon sync completion',
+              'Alerts upon completion',
               'notifications-outline',
               <Switch
                 value={settings.notifyOnSync}
@@ -473,7 +519,7 @@ export const SettingsScreen = () => {
                   false: 'rgba(255,255,255,0.1)',
                   true: theme.primary,
                 }}
-                thumbColor="#FFFFFF"
+                thumbColor="#16161b"
               />,
             )}
 
@@ -488,7 +534,7 @@ export const SettingsScreen = () => {
                   false: 'rgba(255,255,255,0.1)',
                   true: theme.primary,
                 }}
-                thumbColor="#FFFFFF"
+                thumbColor="#16161b"
               />,
               false, // No divider for last item
             )}
@@ -513,7 +559,7 @@ export const SettingsScreen = () => {
                     )
                   }
                 >
-                  <Ionicons name="remove" size={18} color={theme.textMain} />
+                  <Ionicons name="remove" size={16} color={theme.textMain} />
                 </TouchableOpacity>
                 <Text style={styles.intervalText}>{settings.maxRetries}</Text>
                 <TouchableOpacity
@@ -522,7 +568,7 @@ export const SettingsScreen = () => {
                     updateSetting('maxRetries', settings.maxRetries + 1)
                   }
                 >
-                  <Ionicons name="add" size={18} color={theme.textMain} />
+                  <Ionicons name="add" size={16} color={theme.textMain} />
                 </TouchableOpacity>
               </View>,
             )}
@@ -538,16 +584,104 @@ export const SettingsScreen = () => {
                     updateSetting('timeout', Math.max(5, settings.timeout - 5))
                   }
                 >
-                  <Ionicons name="remove" size={18} color={theme.textMain} />
+                  <Ionicons name="remove" size={16} color={theme.textMain} />
                 </TouchableOpacity>
                 <Text style={styles.intervalText}>{settings.timeout}</Text>
                 <TouchableOpacity
                   style={styles.intervalButton}
                   onPress={() => updateSetting('timeout', settings.timeout + 5)}
                 >
-                  <Ionicons name="add" size={18} color={theme.textMain} />
+                  <Ionicons name="add" size={16} color={theme.textMain} />
                 </TouchableOpacity>
               </View>,
+              false,
+            )}
+          </>,
+        )}
+
+        {/* Security & Access */}
+        {renderSection(
+          'Security & Key Access',
+          <>
+            {renderSettingItem(
+              'Active Key',
+              `${settings.apiKey ? settings.apiKey.substring(0, 16) + '...' : 'Not Set'}`,
+              'key-outline',
+              <View style={styles.badgePill}>
+                <Text style={styles.badgeText}>ISOLATED</Text>
+              </View>,
+            )}
+            {renderSettingItem(
+              'Change Password',
+              'Update app access password (default: envy)',
+              'lock-closed-outline',
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => {
+                  setPassError('');
+                  setPassSuccess('');
+                  setShowPasswordModal(!showPasswordModal);
+                }}
+              >
+                <Text style={styles.editButtonText}>
+                  {showPasswordModal ? 'Close' : 'Change'}
+                </Text>
+              </TouchableOpacity>,
+            )}
+
+            {showPasswordModal && (
+              <View style={styles.deviceEditForm}>
+                {passError ? (
+                  <Text style={styles.errorTextInline}>{passError}</Text>
+                ) : null}
+                {passSuccess ? (
+                  <Text style={styles.successTextInline}>{passSuccess}</Text>
+                ) : null}
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Current Password</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={currentPassInput}
+                    onChangeText={setCurrentPassInput}
+                    placeholder="Current password (default: envy)"
+                    placeholderTextColor={theme.textMuted}
+                    secureTextEntry
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>New Password</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={newPassInput}
+                    onChangeText={setNewPassInput}
+                    placeholder="Enter new password"
+                    placeholderTextColor={theme.textMuted}
+                    secureTextEntry
+                  />
+                </View>
+
+                <View style={styles.formActions}>
+                  <TouchableOpacity
+                    style={[styles.formActionButton, styles.saveDeviceButton]}
+                    onPress={handleChangePassword}
+                  >
+                    <Text style={styles.saveButtonText}>Update Password</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {renderSettingItem(
+              'Lock App Session',
+              'Requires Activation Key & Password at startup',
+              'log-out-outline',
+              <TouchableOpacity style={styles.editBtn} onPress={handleLockApp}>
+                <Text style={[styles.editButtonText, { color: theme.error }]}>
+                  Lock App
+                </Text>
+              </TouchableOpacity>,
               false,
             )}
           </>,
@@ -562,7 +696,7 @@ export const SettingsScreen = () => {
           >
             <Ionicons
               name="warning-outline"
-              size={20}
+              size={18}
               color={theme.error}
               style={{ marginRight: 8 }}
             />
@@ -585,50 +719,64 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.background,
   },
-  topOrb: {
+  bgOrb1: {
     position: 'absolute',
-    top: -150,
-    right: -100,
+    top: '-10%',
+    left: '-20%',
+    width: 350,
+    height: 350,
+    borderRadius: 175,
+    backgroundColor: theme.primary,
+    opacity: 0.05,
+    transform: [{ scale: 1.5 }],
+  },
+  bgOrb2: {
+    position: 'absolute',
+    bottom: '-10%',
+    right: '-20%',
     width: 400,
     height: 400,
     borderRadius: 200,
-    backgroundColor: theme.primary,
+    backgroundColor: '#60a5fa', // Blue
+    opacity: 0.05,
+    transform: [{ scale: 1.5 }],
   },
   header: {
-    padding: 24,
-    paddingTop: 60,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: theme.cardBorder,
+    backgroundColor: 'rgba(22, 22, 27, 0.8)',
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 26,
+    fontWeight: '300', // font-light
     color: theme.textMain,
-    marginBottom: 6,
-    letterSpacing: 0.5,
+    letterSpacing: -0.3,
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: theme.textSub,
+    marginTop: 2,
   },
   content: {
     flex: 1,
-    padding: 24,
+    padding: 20,
   },
   section: {
-    marginBottom: 32,
+    marginBottom: 28,
   },
   sectionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     color: theme.textMain,
-    marginBottom: 16,
-    letterSpacing: 0.5,
+    marginBottom: 12,
+    letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
   sectionContent: {
     backgroundColor: theme.cardBg,
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: theme.cardBorder,
     overflow: 'hidden',
@@ -640,10 +788,12 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
   },
   settingIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#16161b',
+    borderWidth: 1,
+    borderColor: theme.cardBorder,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -653,9 +803,10 @@ const styles = StyleSheet.create({
   },
   settingTitle: {
     fontSize: 15,
-    fontWeight: '500',
+    fontWeight: '600',
     color: theme.textMain,
     marginBottom: 4,
+    letterSpacing: 0.2,
   },
   settingSubtitle: {
     fontSize: 12,
@@ -667,87 +818,76 @@ const styles = StyleSheet.create({
   settingDivider: {
     position: 'absolute',
     bottom: 0,
-    left: 64, // Align with text instead of edge
+    left: 70, // Align with text
     right: 16,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: theme.cardBorder,
   },
-  editButtonText: {
-    fontSize: 14,
-    color: theme.primary,
-    fontWeight: '600',
-    paddingHorizontal: 8,
-  },
-  editContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  input: {
-    width: 140,
-    height: 36,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 8,
+
+  // Custom button overrides
+  editBtn: {
     paddingHorizontal: 12,
-    color: theme.textMain,
-    fontSize: 13,
+    paddingVertical: 6,
+    backgroundColor: '#16161b',
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: theme.cardBorder,
-    marginRight: 8,
   },
-  saveButton: {
-    backgroundColor: theme.primary,
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+  editButtonText: {
+    fontSize: 12,
+    color: theme.primary,
+    fontWeight: '600',
   },
+
   testButton: {
     flexDirection: 'row',
     margin: 16,
-    backgroundColor: 'rgba(228, 77, 38, 0.1)',
+    backgroundColor: 'rgba(218, 244, 170, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(228, 77, 38, 0.3)',
-    borderRadius: 12,
+    borderColor: 'rgba(218, 244, 170, 0.2)',
+    borderRadius: 16,
     padding: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
   testButtonText: {
     color: theme.primary,
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
   },
   intervalContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    backgroundColor: '#16161b',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.cardBorder,
+    padding: 2,
   },
   intervalButton: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
     borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   intervalText: {
-    fontSize: 14,
+    fontSize: 13,
     color: theme.textMain,
     fontWeight: '600',
-    minWidth: 28,
+    minWidth: 24,
     textAlign: 'center',
   },
   dangerZone: {
-    marginTop: 10,
+    marginTop: 8,
     marginBottom: 20,
   },
   dangerButton: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 69, 58, 0.1)',
+    backgroundColor: theme.dangerBg,
     borderWidth: 1,
-    borderColor: 'rgba(255, 69, 58, 0.3)',
-    borderRadius: 16,
+    borderColor: theme.dangerBorder,
+    borderRadius: 20,
     padding: 16,
     justifyContent: 'center',
     alignItems: 'center',
@@ -755,14 +895,14 @@ const styles = StyleSheet.create({
   dangerButtonText: {
     color: theme.error,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   appInfo: {
     alignItems: 'center',
     paddingVertical: 20,
   },
   appInfoText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: theme.textSub,
     letterSpacing: 1,
@@ -770,9 +910,11 @@ const styles = StyleSheet.create({
   },
   appInfoSubtext: {
     fontSize: 10,
-    color: 'rgba(255,255,255,0.3)',
+    color: theme.textMuted,
     textTransform: 'uppercase',
   },
+
+  // Device Edit Section overrides
   deviceItemContainer: {
     padding: 16,
     paddingVertical: 18,
@@ -788,11 +930,23 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 16,
   },
+  deviceIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#16161b',
+    borderWidth: 1,
+    borderColor: theme.cardBorder,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
   deviceItemName: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     color: theme.textMain,
     marginBottom: 4,
+    letterSpacing: 0.2,
   },
   selectedDeviceText: {
     color: theme.primary,
@@ -803,28 +957,28 @@ const styles = StyleSheet.create({
   },
   deviceEditForm: {
     marginTop: 16,
-    padding: 14,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: 12,
+    padding: 16,
+    backgroundColor: '#16161b',
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: theme.cardBorder,
   },
   formGroup: {
-    marginBottom: 12,
+    marginBottom: 14,
   },
   formLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
     color: theme.textSub,
     textTransform: 'uppercase',
     marginBottom: 6,
     letterSpacing: 0.5,
   },
   formInput: {
-    height: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    height: 44,
+    backgroundColor: theme.cardBg,
+    borderRadius: 10,
+    paddingHorizontal: 14,
     color: theme.textMain,
     fontSize: 13,
     borderWidth: 1,
@@ -833,20 +987,20 @@ const styles = StyleSheet.create({
   formActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 8,
+    gap: 10,
+    marginTop: 10,
   },
   formActionButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
   cancelButton: {
-    backgroundColor: 'transparent',
+    backgroundColor: theme.cardBg,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: theme.cardBorder,
   },
   cancelButtonText: {
     color: theme.textSub,
@@ -857,8 +1011,20 @@ const styles = StyleSheet.create({
     backgroundColor: theme.primary,
   },
   saveButtonText: {
-    color: '#FFFFFF',
+    color: theme.primaryText,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  errorTextInline: {
+    color: theme.error,
     fontSize: 12,
     fontWeight: '600',
+    marginBottom: 8,
+  },
+  successTextInline: {
+    color: theme.success,
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8,
   },
 });
