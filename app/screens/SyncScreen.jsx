@@ -9,6 +9,7 @@ import {
   Easing,
 } from 'react-native';
 import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
+import { useToast } from '../components/Toast';
 
 const theme = {
   background: '#16161b',
@@ -21,6 +22,7 @@ const theme = {
 };
 
 export const SyncScreen = () => {
+  const { showToast } = useToast();
   const [isSyncing, setIsSyncing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Ready to securely sync');
   const [lastSyncTime, setLastSyncTime] = useState('Never synced');
@@ -133,12 +135,14 @@ export const SyncScreen = () => {
         if (result.version !== undefined) {
           setDbVersion(result.version);
         }
+        showToast('Database synchronized successfully!', 'success');
       } else {
         setStatusMessage('Sync Failed');
+        showToast('Sync completed with warnings', 'warning');
       }
     } catch (err) {
-      console.error(err);
       setStatusMessage(`Sync Failed: ${err.message}`);
+      showToast(err.message || 'Synchronization failed', 'error');
     } finally {
       setIsSyncing(false);
 

@@ -13,6 +13,7 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
 import { ERPAnalyticsCharts } from '../components/ERPAnalyticsCharts';
+import { useToast } from '../components/Toast';
 
 const { width } = Dimensions.get('window');
 
@@ -43,6 +44,7 @@ const formatCurrency = val => {
 };
 
 export const HomeScreen = ({ onNavigate }) => {
+  const { showToast } = useToast();
   const [devices, setDevices] = useState([]);
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -73,47 +75,56 @@ export const HomeScreen = ({ onNavigate }) => {
   const glowAnim = useRef(new Animated.Value(0)).current;
 
   const loadAllData = async () => {
-    await syncService.loadSettings();
-
-    const loadedDevices = syncService.getDevices();
-    setDevices(loadedDevices);
-    const activeSelected = syncService.getSelectedDevice();
-    setSelectedDevice(activeSelected);
-
-    // Fetch live database statistics from SQLite
     try {
-      const liveStats = await syncService.getDashboardStatistics();
-      if (liveStats) {
-        setDbStats(liveStats);
+      await syncService.loadSettings();
+
+      const loadedDevices = syncService.getDevices() || [];
+      setDevices(loadedDevices);
+      const activeSelected = syncService.getSelectedDevice();
+      setSelectedDevice(activeSelected);
+
+      // Fetch live database statistics from SQLite
+      try {
+        const liveStats = await syncService.getDashboardStatistics();
+        if (liveStats) {
+          setDbStats(liveStats);
+        }
+      } catch (e) {
+        // Handled silently
       }
-    } catch (e) {
-      console.log('Error fetching DB stats:', e);
+
+      // Parallel pings to check online devices
+      const pingedDevices = await Promise.all(
+        loadedDevices.map(async device => {
+          if (!device) return { id: 0, status: 'offline' };
+          const isOnline = await syncService.pingDevice(device);
+          return { ...device, status: isOnline ? 'online' : 'offline' };
+        }),
+      );
+
+      syncService.devices = pingedDevices;
+      const connectedOnlineDevices = pingedDevices.filter(d => d && d.status === 'online');
+      setDevices(connectedOnlineDevices);
+
+      const currentSelected =
+        connectedOnlineDevices.find(d => d.id === activeSelected?.id) || connectedOnlineDevices[0] || activeSelected || pingedDevices[0];
+      setSelectedDevice(currentSelected || null);
+
+      setSyncStats({
+        totalSyncs: currentSelected?.totalSyncs || 0,
+        lastSyncTime: syncService.formatDeviceLastSyncTime(currentSelected),
+        dataTransferred: syncService.formatBytes(
+          currentSelected?.dataTransferredBytes || 0,
+        ),
+        activeDevices: connectedOnlineDevices.length,
+      });
+
+      if (connectedOnlineDevices.length === 0) {
+        showToast('No active connected devices online. Ensure backend is running.', 'info');
+      }
+    } catch (err) {
+      showToast('Could not sync device status automatically', 'warning');
     }
-
-    // Parallel pings to check online devices
-    const pingedDevices = await Promise.all(
-      loadedDevices.map(async device => {
-        const isOnline = await syncService.pingDevice(device);
-        return { ...device, status: isOnline ? 'online' : 'offline' };
-      }),
-    );
-
-    syncService.devices = pingedDevices;
-    const connectedOnlineDevices = pingedDevices.filter(d => d.status === 'online');
-    setDevices(connectedOnlineDevices);
-
-    const currentSelected =
-      connectedOnlineDevices.find(d => d.id === activeSelected?.id) || connectedOnlineDevices[0] || activeSelected || pingedDevices[0];
-    setSelectedDevice(currentSelected);
-
-    setSyncStats({
-      totalSyncs: currentSelected?.totalSyncs || 0,
-      lastSyncTime: syncService.formatDeviceLastSyncTime(currentSelected),
-      dataTransferred: syncService.formatBytes(
-        currentSelected?.dataTransferredBytes || 0,
-      ),
-      activeDevices: connectedOnlineDevices.length,
-    });
   };
 
   useEffect(() => {

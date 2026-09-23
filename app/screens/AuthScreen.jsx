@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
+import { useToast } from '../components/Toast';
 
 const theme = {
   background: '#16161b',
@@ -67,6 +68,7 @@ const formatKey = (rawText) => {
 };
 
 export const AuthScreen = ({ onAuthenticated }) => {
+  const { showToast } = useToast();
   const [activationKeyInput, setActivationKeyInput] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -118,27 +120,33 @@ export const AuthScreen = ({ onAuthenticated }) => {
   const handleUnlock = async () => {
     setErrorMsg('');
     if (!activationKeyInput.trim()) {
-      setErrorMsg('Please enter your Activation Key.');
+      const msg = 'Please enter your Activation Key.';
+      setErrorMsg(msg);
+      showToast(msg, 'warning');
       return;
     }
     if (!password) {
-      setErrorMsg('Please enter your password.');
+      const msg = 'Please enter your password.';
+      setErrorMsg(msg);
+      showToast(msg, 'warning');
       return;
     }
 
     setLoading(true);
     try {
-      console.log('[AUTH-SCREEN] Submitting key to syncService...');
       const result = await syncService.authenticate(activationKeyInput.trim(), password);
       if (result.success) {
+        showToast('Activation successful!', 'success');
         onAuthenticated();
       } else {
-        console.warn('[AUTH-SCREEN] Authentication failed:', result.error);
-        setErrorMsg(result.error || 'Invalid Activation Key or password.');
+        const msg = result.error || 'Invalid Activation Key or password.';
+        setErrorMsg(msg);
+        showToast(msg, 'error');
       }
     } catch (err) {
-      console.error('[AUTH-SCREEN] Auth Exception:', err);
-      setErrorMsg(err.message || 'Authentication failed due to a system error.');
+      const msg = err.message || 'Authentication failed due to a system error.';
+      setErrorMsg(msg);
+      showToast(msg, 'error');
     } finally {
       setLoading(false);
     }

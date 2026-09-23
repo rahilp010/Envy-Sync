@@ -42,27 +42,27 @@ function base64ToUint8Array(base64) {
   for (let i = 0; i < chars.length; i++) {
     lookup[chars.charCodeAt(i)] = i;
   }
-  
+
   let bufferLength = base64.length * 0.75,
-      len = base64.length, i, p = 0,
-      encoded1, encoded2, encoded3, encoded4;
-      
+    len = base64.length, i, p = 0,
+    encoded1, encoded2, encoded3, encoded4;
+
   if (base64[base64.length - 1] === '=') {
     bufferLength--;
     if (base64[base64.length - 2] === '=') {
       bufferLength--;
     }
   }
-  
+
   const arrayBuffer = new ArrayBuffer(bufferLength),
-        bytes = new Uint8Array(arrayBuffer);
-        
+    bytes = new Uint8Array(arrayBuffer);
+
   for (i = 0; i < len; i += 4) {
     encoded1 = lookup[base64.charCodeAt(i)];
     encoded2 = lookup[base64.charCodeAt(i + 1)];
     encoded3 = lookup[base64.charCodeAt(i + 2)];
     encoded4 = lookup[base64.charCodeAt(i + 3)];
-    
+
     bytes[p++] = (encoded1 << 2) | (encoded2 >> 4);
     if (encoded3 !== undefined) {
       bytes[p++] = ((encoded2 & 15) << 4) | (encoded3 >> 2);
@@ -71,7 +71,7 @@ function base64ToUint8Array(base64) {
       bytes[p++] = ((encoded3 & 3) << 6) | (encoded4 & 63);
     }
   }
-  
+
   return bytes;
 }
 
@@ -83,15 +83,15 @@ function uint8ArrayToBase64(bytes) {
     const b1 = bytes[i];
     const b2 = i + 1 < l ? bytes[i + 1] : 0;
     const b3 = i + 2 < l ? bytes[i + 2] : 0;
-    
+
     const e1 = b1 >> 2;
     const e2 = ((b1 & 3) << 4) | (b2 >> 4);
     const e3 = i + 1 < l ? ((b2 & 15) << 2) | (b3 >> 6) : 64;
     const e4 = i + 2 < l ? b3 & 63 : 64;
-    
-    result += chars.charAt(e1) + chars.charAt(e2) + 
-              (e3 === 64 ? '=' : chars.charAt(e3)) + 
-              (e4 === 64 ? '=' : chars.charAt(e4));
+
+    result += chars.charAt(e1) + chars.charAt(e2) +
+      (e3 === 64 ? '=' : chars.charAt(e3)) +
+      (e4 === 64 ? '=' : chars.charAt(e4));
   }
   return result;
 }
@@ -99,9 +99,9 @@ function uint8ArrayToBase64(bytes) {
 const DEFAULT_DEVICES = [
   {
     id: 1,
-    name: 'Desktop PC (Local Wi-Fi)',
-    type: 'desktop',
-    backendUrl: 'http://10.175.67.253:8001',
+    name: 'Vercel Production Server',
+    type: 'mobile',
+    backendUrl: 'https://envy-erp.vercel.app',
     apiKey: '320e016f7a59776fe9dc4cd36d4cc4594cb859379843a9fcef74de5f005eb5ff',
     status: 'offline',
     lastSyncTime: null,
@@ -111,9 +111,9 @@ const DEFAULT_DEVICES = [
   },
   {
     id: 2,
-    name: 'Android Emulator Host',
-    type: 'laptop',
-    backendUrl: 'http://10.0.2.2:8001',
+    name: 'Desktop PC (Local Wi-Fi)',
+    type: 'desktop',
+    backendUrl: 'http://10.175.67.253:8001',
     apiKey: '320e016f7a59776fe9dc4cd36d4cc4594cb859379843a9fcef74de5f005eb5ff',
     status: 'offline',
     lastSyncTime: null,
@@ -123,9 +123,9 @@ const DEFAULT_DEVICES = [
   },
   {
     id: 3,
-    name: 'Vercel Production Server',
-    type: 'mobile',
-    backendUrl: 'https://electron-by-envy.vercel.app',
+    name: 'Android Emulator Host',
+    type: 'laptop',
+    backendUrl: 'http://10.0.2.2:8001',
     apiKey: '320e016f7a59776fe9dc4cd36d4cc4594cb859379843a9fcef74de5f005eb5ff',
     status: 'offline',
     lastSyncTime: null,
@@ -137,7 +137,7 @@ const DEFAULT_DEVICES = [
 
 class SyncService {
   constructor() {
-    this.backendUrl = 'http://10.175.67.253:8001';
+    this.backendUrl = 'https://envy-erp.vercel.app';
     this.apiKey = '320e016f7a59776fe9dc4cd36d4cc4594cb859379843a9fcef74de5f005eb5ff';
     this.password = 'envy';
     this.isActivated = false;
@@ -337,15 +337,19 @@ class SyncService {
       const exists = await fs.exists(settingsPath);
       if (exists) {
         let content = await fs.readFile(settingsPath, 'utf8');
-        if (content.includes('10.163.233.253') || content.includes('10.236.238.253')) {
-          console.log('[SYNC] Auto-migrating settings.json old IP -> 10.175.67.253');
+        if (content.includes('electron-by-envy.vercel.app') || content.includes('10.163.233.253') || content.includes('10.236.238.253')) {
+          console.log('[SYNC] Auto-migrating settings.json to Vercel production server: https://envy-erp.vercel.app');
+          content = content.replace(/electron-by-envy\.vercel\.app/g, 'envy-erp.vercel.app');
           content = content.replace(/10\.163\.233\.253/g, '10.175.67.253');
           content = content.replace(/10\.236\.238\.253/g, '10.175.67.253');
           await fs.writeFile(settingsPath, content, 'utf8');
         }
         const loaded = JSON.parse(content);
 
-        this.backendUrl = loaded.backendUrl || this.backendUrl;
+        this.backendUrl = loaded.backendUrl || 'https://envy-erp.vercel.app';
+        if (this.backendUrl.includes('electron-by-envy.vercel.app')) {
+          this.backendUrl = 'https://envy-erp.vercel.app';
+        }
         this.apiKey = loaded.apiKey || this.apiKey;
         this.password = loaded.password || 'envy';
         this.isActivated = loaded.isActivated !== undefined ? loaded.isActivated : false;
@@ -364,10 +368,19 @@ class SyncService {
 
         // Load devices array
         this.devices = loaded.devices && loaded.devices.length > 0 ? loaded.devices : JSON.parse(JSON.stringify(DEFAULT_DEVICES));
-        
+        this.devices = this.devices.map(d => {
+          if (d.backendUrl && d.backendUrl.includes('electron-by-envy.vercel.app')) {
+            return { ...d, backendUrl: 'https://envy-erp.vercel.app' };
+          }
+          return d;
+        });
+
         // Load selected device reference
         if (loaded.selectedDevice) {
           this.selectedDevice = loaded.selectedDevice;
+          if (this.selectedDevice.backendUrl && this.selectedDevice.backendUrl.includes('electron-by-envy.vercel.app')) {
+            this.selectedDevice.backendUrl = 'https://envy-erp.vercel.app';
+          }
         } else {
           this.selectedDevice = this.devices.find(d => d.isDefault) || this.devices[0];
         }
@@ -413,7 +426,7 @@ class SyncService {
       if (settings.compressData !== undefined) this.compressData = settings.compressData;
       if (settings.maxRetries !== undefined) this.maxRetries = settings.maxRetries;
       if (settings.timeout !== undefined) this.timeout = settings.timeout;
-      
+
       if (settings.totalSyncs !== undefined) this.totalSyncs = settings.totalSyncs;
       if (settings.lastSyncTime !== undefined) this.lastSyncTime = settings.lastSyncTime;
       if (settings.dataTransferredBytes !== undefined) this.dataTransferredBytes = settings.dataTransferredBytes;
@@ -501,7 +514,7 @@ class SyncService {
   getSelectedDevice() {
     if (!this.selectedDevice) {
       const devices = this.getDevices();
-      this.selectedDevice = devices.find(d => d.isDefault) || devices[0];
+      this.selectedDevice = (devices && devices.length > 0) ? (devices.find(d => d.isDefault) || devices[0]) : null;
     }
     return this.selectedDevice;
   }
@@ -510,10 +523,14 @@ class SyncService {
    * Format last sync time string for a device
    */
   formatDeviceLastSyncTime(device) {
-    if (!device.lastSyncTime) {
+    if (!device || !device.lastSyncTime) {
       return 'Never synced';
     }
-    const diffMs = Date.now() - new Date(device.lastSyncTime).getTime();
+    const timeVal = new Date(device.lastSyncTime).getTime();
+    if (isNaN(timeVal)) {
+      return 'Never synced';
+    }
+    const diffMs = Date.now() - timeVal;
     const diffMins = Math.floor(diffMs / 60000);
 
     if (diffMins < 1) return 'Just now';
@@ -537,11 +554,11 @@ class SyncService {
   async pingDevice(device) {
     if (!device.backendUrl) return false;
     const url = `${device.backendUrl.replace(/\/$/, '')}/api/health`;
-    
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 seconds timeout
-      
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -549,7 +566,7 @@ class SyncService {
         },
         signal: controller.signal
       });
-      
+
       clearTimeout(timeoutId);
       return response.status === 200;
     } catch (error) {
@@ -600,7 +617,7 @@ class SyncService {
    * @param {Function} onStatus - Status change callback
    * @returns {Promise<Object>} Sync result
    */
-  async performSync(onStatus = () => {}) {
+  async performSync(onStatus = () => { }) {
     if (!this.isConfigured) {
       throw new Error('SyncService not configured. Call configure() first.');
     }
@@ -610,26 +627,26 @@ class SyncService {
       throw new Error('RNFS package not available.');
     }
 
-    // Connect with role=phone
-    const wsUrl = `${this.backendUrl.replace(/^http/, 'ws')}/sync?apiKey=${this.apiKey}&role=phone&deviceId=${Platform.OS}-${Platform.Version}`;
+    const cleanBackendUrl = (this.backendUrl || 'https://envy-erp.vercel.app').replace(/\/+$/, '');
+    const wsUrl = `${cleanBackendUrl.replace(/^http/, 'ws')}/sync?apiKey=${this.apiKey}&role=phone&deviceId=${Platform.OS}-${Platform.Version}`;
     console.log(`[SYNC] Connecting to WebSocket: ${wsUrl}`);
-    
+
     return new Promise((resolve, reject) => {
       let ws;
       let sessionRequestId = null;
-      
+
       try {
         ws = new WebSocket(wsUrl);
       } catch (err) {
         return reject(new Error(`WebSocket connection failed: ${err.message}`));
       }
-      
+
       ws.onopen = () => {
         console.log('[SYNC] WebSocket connection opened. Requesting database sync...');
         onStatus('Preparing database...');
-        
+
         sessionRequestId = global.crypto?.randomUUID ? global.crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
-        
+
         ws.send(JSON.stringify({
           type: 'SYNC_REQUEST',
           requestId: sessionRequestId,
@@ -637,7 +654,7 @@ class SyncService {
           currentVersion: 0
         }));
       };
-      
+
       ws.onmessage = async (event) => {
         let msg;
         try {
@@ -646,26 +663,26 @@ class SyncService {
           console.error('[SYNC] Failed to parse WebSocket message:', err.message);
           return;
         }
-        
+
         const { type, requestId, file, downloadUrl, error } = msg;
-        
+
         if (requestId !== sessionRequestId) {
           console.warn('[SYNC] Request ID mismatch. Ignoring message.');
           return;
         }
-        
+
         switch (type) {
           case 'SYNC_PREPARING':
             onStatus('Preparing database...');
             break;
-            
+
           case 'SYNC_UPLOADING':
             onStatus('Uploading...');
             break;
-            
+
           case 'SYNC_READY':
             onStatus('Downloading...');
-            
+
             try {
               const cacheDir = getCacheDir();
               const tempDir = `${cacheDir}/sync_temp`;
@@ -673,49 +690,49 @@ class SyncService {
               if (!dirExists) {
                 await fs.mkdir(tempDir);
               }
-              
+
               this.tempDbPath = `${tempDir}/data-${Date.now()}.db.enc`;
               console.log(`[SYNC] Downloading sync database to: ${this.tempDbPath}`);
-              
+
               const downloadResult = await fs.downloadFile({
                 fromUrl: downloadUrl,
                 toFile: this.tempDbPath
               }).promise;
-              
+
               if (downloadResult.statusCode !== 200) {
                 throw new Error(`Download failed with HTTP status ${downloadResult.statusCode}`);
               }
-              
+
               onStatus('Verifying...');
-              
+
               // Read binary content as base64
               const base64Data = await fs.readFile(this.tempDbPath, 'base64');
               const binaryString = forge.util.decode64(base64Data);
-              
+
               // Verify SHA-256 using node-forge
               const md = forge.md.sha256.create();
               md.update(binaryString);
               const hashHex = md.digest().toHex();
-              
+
               console.log(`[SYNC] Server SHA-256: ${file.sha256}`);
               console.log(`[SYNC] Local SHA-256: ${hashHex}`);
-              
+
               if (hashHex.toLowerCase() !== file.sha256.toLowerCase()) {
                 throw new Error('Downloaded database integrity check failed (SHA-256 mismatch)');
               }
-              
+
               onStatus('Processing...');
-              
+
               // Decrypt the file using node-forge (AES-256-GCM)
               const iv = binaryString.substring(0, 16);
               const tag = binaryString.substring(16, 32);
               const ciphertext = binaryString.substring(32);
-              
+
               // Derive key using SHA-256 hash of 'envy-secure-key-2025'
               const keyMd = forge.md.sha256.create();
               keyMd.update('envy-secure-key-2025');
               const derivedKey = keyMd.digest().getBytes();
-              
+
               const decipher = forge.cipher.createDecipher('AES-GCM', derivedKey);
               decipher.start({
                 iv: iv,
@@ -723,23 +740,23 @@ class SyncService {
               });
               decipher.update(forge.util.createBuffer(ciphertext));
               const pass = decipher.finish();
-              
+
               if (!pass) {
                 throw new Error('Database decryption failed (GCM authentication check failed)');
               }
-              
+
               const decryptedBytes = decipher.output.getBytes();
               const decryptedBase64 = forge.util.encode64(decryptedBytes);
-              
+
               const destDir = Platform.select({
                 android: fs.DocumentDirectoryPath,
                 ios: `${fs.LibraryDirectoryPath}/NoCloud`
               });
-              
+
               if (!(await fs.exists(destDir))) {
                 await fs.mkdir(destDir);
               }
-              
+
               // Close any old open SQLite connection handle
               if (this.db) {
                 try {
@@ -776,21 +793,21 @@ class SyncService {
               if (await fs.exists(destPath)) {
                 await fs.unlink(destPath);
               }
-              
+
               await fs.writeFile(destPath, decryptedBase64, 'base64');
               console.log(`[SYNC] Decrypted database saved to destination: ${destPath}`);
-              
+
               // Open fresh database via react-native-sqlite-2
               this.db = SQLite.openDatabase(dbFileName, '1.0', 'Synced Database', 5 * 1024 * 1024);
               console.log('[SYNC] Fresh key-isolated synced database opened successfully.');
-              
+
               // Clean up temp file
               try {
                 if (await fs.exists(this.tempDbPath)) {
                   await fs.unlink(this.tempDbPath);
                 }
-              } catch (err) {}
-              
+              } catch (err) { }
+
               // Update settings & statistics
               const syncedBytes = file.size;
               const activeDeviceId = this.selectedDevice ? this.selectedDevice.id : 1;
@@ -801,11 +818,11 @@ class SyncService {
                 this.devices[deviceIndex].dataTransferredBytes = (this.devices[deviceIndex].dataTransferredBytes || 0) + syncedBytes;
                 this.selectedDevice = this.devices[deviceIndex];
               }
-              
+
               this.totalSyncs++;
               this.lastSyncTime = new Date().toISOString();
               this.dataTransferredBytes += syncedBytes;
-              
+
               await this.saveSettings({
                 totalSyncs: this.totalSyncs,
                 lastSyncTime: this.lastSyncTime,
@@ -814,7 +831,7 @@ class SyncService {
                 devices: this.devices,
                 selectedDevice: this.selectedDevice
               });
-              
+
               // Send SYNC_COMPLETE signal
               ws.send(JSON.stringify({
                 type: 'SYNC_COMPLETE',
@@ -822,7 +839,7 @@ class SyncService {
                 version: file.version,
                 sha256: file.sha256
               }));
-              
+
               onStatus('Sync Complete');
               ws.close();
               resolve({
@@ -831,7 +848,7 @@ class SyncService {
                 dbPath: destPath,
                 version: file.version
               });
-              
+
             } catch (err) {
               console.error('[SYNC] Sync process failure:', err.message);
               ws.send(JSON.stringify({
@@ -843,23 +860,23 @@ class SyncService {
               reject(err);
             }
             break;
-            
+
           case 'SYNC_FAILED':
             ws.close();
             reject(new Error(error || 'Sync preparing failed on server'));
             break;
-            
+
           default:
             console.warn('[SYNC] Unknown signaling state received:', type);
         }
       };
-      
+
       ws.onerror = (err) => {
         console.error('[SYNC] WebSocket error event details:', err);
         console.error('[SYNC] WebSocket error message:', err ? err.message : 'No message');
         reject(new Error(`WebSocket connection error (URL: ${wsUrl})`));
       };
-      
+
       ws.onclose = (event) => {
         console.log('[SYNC] WebSocket closed. Code:', event.code, 'Reason:', event.reason, 'wasClean:', event.wasClean);
         if (event.code !== 1000 && event.code !== 1005) {
@@ -1147,7 +1164,7 @@ class SyncService {
    */
   async _initiateSync() {
     const response = await this._makeRequest('/api/sync/initiate', 'POST');
-    
+
     if (!response.success || !response.token) {
       throw new Error('Failed to initiate sync');
     }
@@ -1161,23 +1178,23 @@ class SyncService {
    */
   async _downloadDatabase() {
     const downloadUrl = `${this.backendUrl}/api/sync/download/${this.syncToken}`;
-    
+
     // Get RNFS lazily
     const fs = getRNFS();
     if (!fs) {
       throw new Error('RNFS package not available. Please ensure it is properly installed and linked.');
     }
-    
+
     // Create temp directory if it doesn't exist
     const cacheDir = getCacheDir();
     const tempDir = `${cacheDir}/sync_temp`;
-    
+
     try {
       // Check if RNFS methods are available
       if (typeof fs.exists !== 'function' || typeof fs.mkdir !== 'function') {
         throw new Error('RNFS methods not available. Package may not be properly linked.');
       }
-      
+
       const dirExists = await fs.exists(tempDir);
       if (!dirExists) {
         await fs.mkdir(tempDir);
@@ -1221,7 +1238,7 @@ class SyncService {
         android: fs.DocumentDirectoryPath,
         ios: `${fs.LibraryDirectoryPath}/NoCloud`,
       });
-      
+
       const dbFileName = this.getDbFileName();
       const destPath = `${destDir}/${dbFileName}`;
 
@@ -1261,7 +1278,7 @@ class SyncService {
         android: fs.DocumentDirectoryPath,
         ios: `${fs.LibraryDirectoryPath}/NoCloud`,
       });
-      
+
       let dbFileName = this.getDbFileName();
       let destPath = `${destDir}/${dbFileName}`;
 
@@ -1282,7 +1299,7 @@ class SyncService {
             destPath = matching[0].path;
             fileExists = true;
           }
-        } catch (dirErr) {}
+        } catch (dirErr) { }
       }
 
       // Fallback: check legacy device database path and copy if key-isolated DB not found
@@ -1305,7 +1322,7 @@ class SyncService {
           if (typeof this.db.close === 'function') {
             this.db.close();
           }
-        } catch (e) {}
+        } catch (e) { }
         this.db = null;
       }
 
@@ -1340,10 +1357,10 @@ class SyncService {
 
     try {
       const response = await fetch(url, options);
-      
+
       // Get response text first to handle non-JSON responses
       const responseText = await response.text();
-      
+
       // Try to parse as JSON
       let data;
       try {

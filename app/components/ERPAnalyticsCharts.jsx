@@ -35,40 +35,55 @@ const formatCurrency = val => {
   return `₹${Math.round(val)}`;
 };
 
+function safeNum(val) {
+  const n = Number(val);
+  return isNaN(n) ? 0 : n;
+}
+
 // Helper math to draw clean SVG arcs
 function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
-  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180.0;
+  const angle = safeNum(angleInDegrees);
+  const angleInRadians = ((angle - 90) * Math.PI) / 180.0;
+  const x = centerX + radius * Math.cos(angleInRadians);
+  const y = centerY + radius * Math.sin(angleInRadians);
   return {
-    x: centerX + radius * Math.cos(angleInRadians),
-    y: centerY + radius * Math.sin(angleInRadians),
+    x: isNaN(x) ? centerX : x,
+    y: isNaN(y) ? centerY : y,
   };
 }
 
 function describeArc(x, y, radius, startAngle, endAngle) {
-  if (endAngle - startAngle >= 360) {
-    endAngle = 359.99;
+  let sAngle = safeNum(startAngle);
+  let eAngle = safeNum(endAngle);
+  if (eAngle - sAngle >= 360) {
+    eAngle = sAngle + 359.99;
   }
-  const start = polarToCartesian(x, y, radius, endAngle);
-  const end = polarToCartesian(x, y, radius, startAngle);
-  const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
+  const start = polarToCartesian(x, y, radius, eAngle);
+  const end = polarToCartesian(x, y, radius, sAngle);
+  const largeArcFlag = eAngle - sAngle <= 180 ? '0' : '1';
+
+  if (isNaN(start.x) || isNaN(start.y) || isNaN(end.x) || isNaN(end.y)) {
+    return 'M 75 20 A 55 55 0 0 0 75 130';
+  }
+
   return [
     'M',
-    start.x,
-    start.y,
+    start.x.toFixed(2),
+    start.y.toFixed(2),
     'A',
     radius,
     radius,
     0,
     largeArcFlag,
     0,
-    end.x,
-    end.y,
+    end.x.toFixed(2),
+    end.y.toFixed(2),
   ].join(' ');
 }
 
 export const ERPAnalyticsCharts = React.memo(({ stats }) => {
-  const bank = Math.max(0, Number(stats?.bankBalance || 0));
-  const cash = Math.max(0, Number(stats?.cashBalance || 0));
+  const bank = Math.max(0, safeNum(stats?.bankBalance));
+  const cash = Math.max(0, safeNum(stats?.cashBalance));
   const totalLiquidity = bank + cash;
 
   const bankRatio = totalLiquidity > 0 ? bank / totalLiquidity : 0.5;
@@ -87,15 +102,19 @@ export const ERPAnalyticsCharts = React.memo(({ stats }) => {
   );
 
   // Bar Chart calculations
-  const salesTot = Math.max(0, Number(stats?.totalSalesAmount || 0));
-  const salesPend = Math.max(0, Number(stats?.pendingSalesAmount || 0));
-  const purchTot = Math.max(0, Number(stats?.totalPurchaseAmount || 0));
-  const purchPend = Math.max(0, Number(stats?.pendingPurchaseAmount || 0));
+  const salesTot = Math.max(0, safeNum(stats?.totalSalesAmount));
+  const salesPend = Math.max(0, safeNum(stats?.pendingSalesAmount));
+  const purchTot = Math.max(0, safeNum(stats?.totalPurchaseAmount));
+  const purchPend = Math.max(0, safeNum(stats?.pendingPurchaseAmount));
 
   const maxVal = Math.max(salesTot, salesPend, purchTot, purchPend, 100);
   const chartHeight = 120;
 
-  const getBarHeight = val => Math.max(8, (val / maxVal) * chartHeight);
+  const getBarHeight = val => {
+    const v = safeNum(val);
+    const h = Math.max(8, (v / maxVal) * chartHeight);
+    return isNaN(h) ? 8 : h;
+  };
 
   return (
     <View style={styles.container}>

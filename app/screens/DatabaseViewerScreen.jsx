@@ -1,3 +1,5 @@
+/* eslint-disable react/prop-types */
+/* eslint-disable prettier/prettier */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
@@ -16,29 +18,30 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
 
 // ---------------------------------------------------------------------------
-// Theme — Premium dark palette with depth
+// Theme — Unified with Dashboard & Mobile ecosystem
 // ---------------------------------------------------------------------------
 const theme = {
-  background: '#050507',
-  surface: '#121216',
-  surfaceRaised: 'rgba(255, 255, 255, 0.04)',
-  border: 'rgba(255, 255, 255, 0.08)',
-  borderStrong: 'rgba(255, 255, 255, 0.14)',
-  textPrimary: '#F2F2F3',
-  textSecondary: '#8E8E93',
-  textTertiary: '#5A5A5E',
-  accent: '#E44D26', // Copper/Red accent
-  accentMuted: 'rgba(228, 77, 38, 0.12)',
-  danger: '#FF453A',
-  success: '#30D158',
-  warning: '#FF9F0A',
-  accentBlue: '#0A84FF',
-  accentPurple: '#BF5AF2',
-  accentLime: '#DAF4AA',
+  background: '#16161b',
+  surface: '#16161b',
+  surfaceRaised: '#24242d',
+  border: 'rgba(255, 255, 255, 0.1)',
+  borderStrong: 'rgba(255, 255, 255, 0.15)',
+  textPrimary: '#ffffff',
+  textSecondary: '#9ca3af', // gray-400
+  textTertiary: '#6b7280', // gray-500
+  accent: '#daf4aa',
+  accentText: '#16161b',
+  accentMuted: 'rgba(218, 244, 170, 0.12)',
+  danger: '#f87171', // red-400
+  success: '#34d399', // emerald-400
+  warning: '#fbbf24', // amber-400
+  accentBlue: '#60a5fa', // blue-400
+  accentPurple: '#c084fc', // purple-400
+  accentLime: '#daf4aa',
 };
 
-// UX Helper: Converts raw keys (e.g., 'created_at', 'firstName') to friendly labels ('Created At', 'First Name')
-const formatLabel = (key) => {
+// UX Helper: Converts raw keys to friendly labels
+const formatLabel = key => {
   if (!key) return '';
   let label = key.replace(/[_-]/g, ' ');
   label = label.replace(/([a-z])([A-Z])/g, '$1 $2');
@@ -57,7 +60,7 @@ const formatLabel = (key) => {
     .join(' ');
 };
 
-const formatCurrency = (val) => {
+const formatCurrency = val => {
   if (val === undefined || val === null || isNaN(val)) return '₹0';
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -107,7 +110,7 @@ const DatabaseViewerScreen = () => {
 
       if (!dbOpened) {
         throw new Error(
-          'No database found. Please go to the Sync screen and trigger a synchronization first.'
+          'No database found. Please go to the Sync screen and trigger a synchronization first.',
         );
       }
 
@@ -135,7 +138,7 @@ const DatabaseViewerScreen = () => {
     setRefreshing(false);
   };
 
-  const handleTableSelect = async (tableName) => {
+  const handleTableSelect = async tableName => {
     if (tableName === selectedTable) return;
     setSelectedTable(tableName);
     setTableData([]);
@@ -151,10 +154,10 @@ const DatabaseViewerScreen = () => {
   const filteredData = useMemo(() => {
     if (!searchQuery.trim()) return tableData;
     const lowerQuery = searchQuery.toLowerCase();
-    return tableData.filter((row) =>
+    return tableData.filter(row =>
       Object.values(row).some(
-        (val) => val !== null && String(val).toLowerCase().includes(lowerQuery)
-      )
+        val => val !== null && String(val).toLowerCase().includes(lowerQuery),
+      ),
     );
   }, [tableData, searchQuery]);
 
@@ -166,7 +169,7 @@ const DatabaseViewerScreen = () => {
       style={styles.tabsScroll}
       contentContainerStyle={styles.tabsContent}
     >
-      {tables.map((tableName) => {
+      {tables.map(tableName => {
         const isSelected = selectedTable === tableName;
         let iconName = 'list-outline';
         if (tableName === 'products') iconName = 'cube-outline';
@@ -186,7 +189,7 @@ const DatabaseViewerScreen = () => {
             <Ionicons
               name={iconName}
               size={14}
-              color={isSelected ? theme.accent : theme.textSecondary}
+              color={isSelected ? theme.accentText : theme.textSecondary}
               style={{ marginRight: 6 }}
             />
             <Text
@@ -223,7 +226,12 @@ const DatabaseViewerScreen = () => {
               {row.productName || 'Unnamed Product'}
             </Text>
             <View style={styles.tagRow}>
-              <View style={[styles.badgePill, { backgroundColor: 'rgba(10, 132, 255, 0.12)' }]}>
+              <View
+                style={[
+                  styles.badgePill,
+                  { backgroundColor: 'rgba(96, 165, 250, 0.12)' },
+                ]}
+              >
                 <Text style={[styles.badgeText, { color: theme.accentBlue }]}>
                   {row.assetsType || 'Raw Material'}
                 </Text>
@@ -242,7 +250,9 @@ const DatabaseViewerScreen = () => {
           <View style={styles.priceStockRow}>
             <View>
               <Text style={styles.priceLabel}>Unit Price</Text>
-              <Text style={styles.priceValue}>{formatCurrency(row.productPrice)}</Text>
+              <Text style={styles.priceValue}>
+                {formatCurrency(row.productPrice)}
+              </Text>
             </View>
 
             <View style={{ alignItems: 'flex-end' }}>
@@ -250,9 +260,18 @@ const DatabaseViewerScreen = () => {
               <View
                 style={[
                   styles.stockBadge,
-                  stockStatus === 'in_stock' && { backgroundColor: 'rgba(48, 209, 88, 0.15)' },
-                  stockStatus === 'low_stock' && { backgroundColor: 'rgba(255, 159, 10, 0.15)' },
-                  stockStatus === 'out_of_stock' && { backgroundColor: 'rgba(255, 69, 58, 0.15)' },
+                  stockStatus === 'in_stock' && {
+                    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+                    borderColor: 'rgba(52, 211, 153, 0.25)',
+                  },
+                  stockStatus === 'low_stock' && {
+                    backgroundColor: 'rgba(251, 191, 36, 0.12)',
+                    borderColor: 'rgba(251, 191, 36, 0.25)',
+                  },
+                  stockStatus === 'out_of_stock' && {
+                    backgroundColor: 'rgba(248, 113, 113, 0.12)',
+                    borderColor: 'rgba(248, 113, 113, 0.25)',
+                  },
                 ]}
               >
                 <Ionicons
@@ -294,11 +313,18 @@ const DatabaseViewerScreen = () => {
             </View>
             <View>
               <Text style={styles.miniLabel}>Tax Amount</Text>
-              <Text style={styles.miniValue}>{formatCurrency(row.taxAmount)}</Text>
+              <Text style={styles.miniValue}>
+                {formatCurrency(row.taxAmount)}
+              </Text>
             </View>
             <View>
               <Text style={styles.miniLabel}>Total (Inc. Tax)</Text>
-              <Text style={[styles.miniValue, { color: theme.accentLime, fontWeight: '700' }]}>
+              <Text
+                style={[
+                  styles.miniValue,
+                  { color: theme.accentLime, fontWeight: '700' },
+                ]}
+              >
                 {formatCurrency(row.totalAmountWithTax || row.productPrice)}
               </Text>
             </View>
@@ -310,7 +336,8 @@ const DatabaseViewerScreen = () => {
 
   // 2. CLIENTS CARD
   const renderClientCard = (row, index) => {
-    const isDebtor = row.accountType === 'Debtor';
+    const isDebtor =
+      row.accountType === 'Debtor' || row.accountType === 'Debtors';
     const isEmployee = row.isEmployee === 1;
 
     return (
@@ -330,8 +357,8 @@ const DatabaseViewerScreen = () => {
                 style={[
                   styles.badgePill,
                   isDebtor
-                    ? { backgroundColor: 'rgba(48, 209, 88, 0.12)' }
-                    : { backgroundColor: 'rgba(255, 159, 10, 0.12)' },
+                    ? { backgroundColor: 'rgba(52, 211, 153, 0.12)' }
+                    : { backgroundColor: 'rgba(251, 191, 36, 0.12)' },
                 ]}
               >
                 <Text
@@ -344,8 +371,17 @@ const DatabaseViewerScreen = () => {
                 </Text>
               </View>
               {isEmployee && (
-                <View style={[styles.badgePill, { backgroundColor: 'rgba(191, 90, 242, 0.15)' }]}>
-                  <Text style={[styles.badgeText, { color: theme.accentPurple }]}>EMPLOYEE</Text>
+                <View
+                  style={[
+                    styles.badgePill,
+                    { backgroundColor: 'rgba(192, 132, 252, 0.15)' },
+                  ]}
+                >
+                  <Text
+                    style={[styles.badgeText, { color: theme.accentPurple }]}
+                  >
+                    EMPLOYEE
+                  </Text>
                 </View>
               )}
             </View>
@@ -358,21 +394,33 @@ const DatabaseViewerScreen = () => {
         <View style={styles.cardBodySection}>
           {row.phoneNo ? (
             <View style={styles.infoRow}>
-              <Ionicons name="call-outline" size={14} color={theme.textSecondary} />
+              <Ionicons
+                name="call-outline"
+                size={14}
+                color={theme.textSecondary}
+              />
               <Text style={styles.infoText}>{row.phoneNo}</Text>
             </View>
           ) : null}
 
           {row.gstNo ? (
             <View style={styles.infoRow}>
-              <Ionicons name="business-outline" size={14} color={theme.textSecondary} />
+              <Ionicons
+                name="business-outline"
+                size={14}
+                color={theme.textSecondary}
+              />
               <Text style={styles.infoText}>GST: {row.gstNo}</Text>
             </View>
           ) : null}
 
           {row.address ? (
             <View style={styles.infoRow}>
-              <Ionicons name="location-outline" size={14} color={theme.textSecondary} />
+              <Ionicons
+                name="location-outline"
+                size={14}
+                color={theme.textSecondary}
+              />
               <Text style={styles.infoText} numberOfLines={1}>
                 {row.address}
               </Text>
@@ -387,7 +435,12 @@ const DatabaseViewerScreen = () => {
               <Text
                 style={[
                   styles.miniValue,
-                  { color: Number(row.pendingAmount || 0) > 0 ? theme.danger : theme.textPrimary },
+                  {
+                    color:
+                      Number(row.pendingAmount || 0) > 0
+                        ? theme.danger
+                        : theme.textPrimary,
+                  },
                 ]}
               >
                 {formatCurrency(row.pendingAmount)}
@@ -434,8 +487,8 @@ const DatabaseViewerScreen = () => {
               <View
                 style={[
                   styles.badgePill,
-                  isBank && { backgroundColor: 'rgba(10, 132, 255, 0.15)' },
-                  isCash && { backgroundColor: 'rgba(48, 209, 88, 0.15)' },
+                  isBank && { backgroundColor: 'rgba(96, 165, 250, 0.15)' },
+                  isCash && { backgroundColor: 'rgba(52, 211, 153, 0.15)' },
                 ]}
               >
                 <Text
@@ -449,7 +502,9 @@ const DatabaseViewerScreen = () => {
                 </Text>
               </View>
               {row.accountNumber ? (
-                <Text style={styles.subTagText}>Acc #: {row.accountNumber}</Text>
+                <Text style={styles.subTagText}>
+                  Acc #: {row.accountNumber}
+                </Text>
               ) : null}
             </View>
           </View>
@@ -474,10 +529,20 @@ const DatabaseViewerScreen = () => {
               <Text
                 style={[
                   styles.priceValue,
-                  { color: isBank ? theme.accentBlue : isCash ? theme.success : theme.accent },
+                  {
+                    color: isBank
+                      ? theme.accentBlue
+                      : isCash
+                      ? theme.success
+                      : theme.accentLime,
+                  },
                 ]}
               >
-                {formatCurrency(row.closingBalance !== null ? row.closingBalance : row.openingBalance)}{' '}
+                {formatCurrency(
+                  row.closingBalance !== null
+                    ? row.closingBalance
+                    : row.openingBalance,
+                )}{' '}
                 <Text style={{ fontSize: 11, color: theme.textSecondary }}>
                   ({row.closingBalanceType || 'DR'})
                 </Text>
@@ -505,14 +570,22 @@ const DatabaseViewerScreen = () => {
         <View style={styles.cardHeaderRow}>
           <View style={styles.cardTitleContainer}>
             <Text style={styles.cardMainTitle} numberOfLines={1}>
-              {row.billNo ? `Bill: ${row.billNo}` : `${isSales ? 'Sale' : 'Purchase'} #${row.id}`}
+              {row.billNo
+                ? `Bill: ${row.billNo}`
+                : `${isSales ? 'Sale' : 'Purchase'} #${row.id}`}
             </Text>
             <View style={styles.tagRow}>
               <View
                 style={[
                   styles.badgePill,
-                  isCompleted && { backgroundColor: 'rgba(48, 209, 88, 0.15)' },
-                  isPending && { backgroundColor: 'rgba(255, 159, 10, 0.15)' },
+                  isCompleted && {
+                    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+                    borderColor: 'rgba(52, 211, 153, 0.2)',
+                  },
+                  isPending && {
+                    backgroundColor: 'rgba(251, 191, 36, 0.12)',
+                    borderColor: 'rgba(251, 191, 36, 0.2)',
+                  },
                 ]}
               >
                 <Text
@@ -525,7 +598,12 @@ const DatabaseViewerScreen = () => {
                   {(row.statusOfTransaction || 'completed').toUpperCase()}
                 </Text>
               </View>
-              <View style={[styles.badgePill, { backgroundColor: 'rgba(255, 255, 255, 0.05)' }]}>
+              <View
+                style={[
+                  styles.badgePill,
+                  { backgroundColor: 'rgba(255, 255, 255, 0.05)' },
+                ]}
+              >
                 <Text style={styles.badgeText}>
                   {(row.paymentMethod || 'bank').toUpperCase()}
                 </Text>
@@ -549,7 +627,11 @@ const DatabaseViewerScreen = () => {
                   { color: isSales ? theme.accentLime : theme.textPrimary },
                 ]}
               >
-                {formatCurrency(row.totalAmountWithTax || row.saleAmount || row.purchaseAmount)}
+                {formatCurrency(
+                  row.totalAmountWithTax ||
+                    row.saleAmount ||
+                    row.purchaseAmount,
+                )}
               </Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
@@ -618,8 +700,8 @@ const DatabaseViewerScreen = () => {
               <View
                 style={[
                   styles.badgePill,
-                  isDebit && { backgroundColor: 'rgba(255, 69, 58, 0.15)' },
-                  isCredit && { backgroundColor: 'rgba(48, 209, 88, 0.15)' },
+                  isDebit && { backgroundColor: 'rgba(248, 113, 113, 0.12)' },
+                  isCredit && { backgroundColor: 'rgba(52, 211, 153, 0.12)' },
                 ]}
               >
                 <Text
@@ -699,7 +781,7 @@ const DatabaseViewerScreen = () => {
         </View>
 
         <View style={styles.cardBodySection}>
-          {displayFields.map((key) => {
+          {displayFields.map(key => {
             const val = row[key];
             const isNull = val === null || val === undefined || val === '';
             return (
@@ -807,7 +889,12 @@ const DatabaseViewerScreen = () => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContainer}>
-          <Ionicons name="cloud-offline-outline" size={48} color={theme.accent} style={{ marginBottom: 16 }} />
+          <Ionicons
+            name="cloud-offline-outline"
+            size={48}
+            color={theme.accent}
+            style={{ marginBottom: 16 }}
+          />
           <Text style={styles.errorTitle}>
             {isNoSyncData ? 'No Synced Database' : 'Connection Error'}
           </Text>
@@ -847,7 +934,12 @@ const DatabaseViewerScreen = () => {
       {selectedTable && (
         <View style={styles.searchContainer}>
           <View style={styles.searchInner}>
-            <Ionicons name="search" size={16} color={theme.textTertiary} style={{ marginRight: 8 }} />
+            <Ionicons
+              name="search"
+              size={16}
+              color={theme.textTertiary}
+              style={{ marginRight: 8 }}
+            />
             <TextInput
               style={styles.searchInput}
               placeholder={`Search ${selectedTable}...`}
@@ -863,7 +955,8 @@ const DatabaseViewerScreen = () => {
       {selectedTable && (
         <View style={styles.recordCountRow}>
           <Text style={styles.recordCountText}>
-            {filteredData.length} {filteredData.length === 1 ? 'RECORD' : 'RECORDS'} DISPLAYED
+            {filteredData.length}{' '}
+            {filteredData.length === 1 ? 'RECORD' : 'RECORDS'} DISPLAYED
           </Text>
         </View>
       )}
@@ -892,7 +985,9 @@ const DatabaseViewerScreen = () => {
           )
         ) : (
           <View style={styles.emptyStateContainer}>
-            <Text style={styles.noDataText}>No tables available in synced database.</Text>
+            <Text style={styles.noDataText}>
+              No tables available in synced database.
+            </Text>
           </View>
         )}
       </ScrollView>
@@ -919,8 +1014,8 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 26,
+    fontWeight: '300', // font-light styling
     color: theme.textPrimary,
     letterSpacing: -0.3,
   },
@@ -931,7 +1026,7 @@ const styles = StyleSheet.create({
   },
   tabsScroll: {
     flexGrow: 0,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
     borderBottomColor: theme.border,
   },
   tabsContent: {
@@ -944,24 +1039,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: theme.surface,
+    borderRadius: 12,
+    backgroundColor: theme.surfaceRaised,
     borderWidth: 1,
     borderColor: theme.border,
   },
   tabSelected: {
-    backgroundColor: theme.accentMuted,
+    backgroundColor: theme.accent,
     borderColor: theme.accent,
   },
   tabText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     color: theme.textSecondary,
     letterSpacing: 0.5,
   },
   tabTextSelected: {
-    color: theme.accent,
-    fontWeight: '700',
+    color: theme.accentText,
+    fontWeight: '800',
   },
   searchContainer: {
     paddingHorizontal: 16,
@@ -970,10 +1065,10 @@ const styles = StyleSheet.create({
   searchInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.surface,
+    backgroundColor: theme.surfaceRaised,
     borderWidth: 1,
     borderColor: theme.border,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
@@ -992,7 +1087,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: theme.textSecondary,
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
   },
   content: {
     flex: 1,
@@ -1007,7 +1102,7 @@ const styles = StyleSheet.create({
   // ---------------------------------------------------------------------------
   mobileCard: {
     backgroundColor: theme.surfaceRaised,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: theme.border,
     padding: 16,
@@ -1046,6 +1141,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'transparent',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   badgeText: {
@@ -1062,7 +1159,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.surface,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: theme.border,
   },
@@ -1085,9 +1182,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: theme.textSecondary,
     marginBottom: 2,
+    fontWeight: '500',
   },
   priceValue: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
     color: theme.textPrimary,
   },
@@ -1097,6 +1195,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    borderWidth: 1,
   },
   stockBadgeText: {
     fontSize: 11,
@@ -1117,6 +1216,7 @@ const styles = StyleSheet.create({
     color: theme.textTertiary,
     marginBottom: 2,
     fontWeight: '600',
+    textTransform: 'uppercase',
   },
   miniValue: {
     fontSize: 13,
@@ -1176,23 +1276,23 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   retryButton: {
-    backgroundColor: theme.surface,
+    backgroundColor: theme.surfaceRaised,
     borderWidth: 1,
     borderColor: theme.border,
     paddingHorizontal: 22,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   retryButtonText: {
-    color: theme.textPrimary,
+    color: theme.accent,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   emptyStateContainer: {
     padding: 36,
     alignItems: 'center',
-    backgroundColor: theme.surface,
-    borderRadius: 16,
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: theme.border,
     marginTop: 12,
@@ -1209,9 +1309,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
   },
   modalSheet: {
-    backgroundColor: '#121216',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: '#24242d',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     borderWidth: 1,
     borderColor: theme.borderStrong,
     borderBottomWidth: 0,
@@ -1234,7 +1334,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
     paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
     borderBottomColor: theme.border,
   },
   modalTitle: {
@@ -1253,16 +1353,16 @@ const styles = StyleSheet.create({
   },
   modalFieldRow: {
     paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.border,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
   modalFieldKey: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: theme.textSecondary,
     marginBottom: 4,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
   modalFieldValue: {
     fontSize: 14,

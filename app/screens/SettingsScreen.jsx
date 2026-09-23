@@ -9,9 +9,12 @@ import {
   Switch,
   Animated,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
+import updateService, { CURRENT_APP_VERSION } from '../services/updateService';
+import { useToast } from '../components/Toast';
 
 const theme = {
   background: '#16161b',
@@ -28,9 +31,11 @@ const theme = {
   dangerBorder: 'rgba(248, 113, 113, 0.2)',
 };
 
-export const SettingsScreen = ({ onLogout }) => {
+export const SettingsScreen = ({ onLogout, onCheckUpdate }) => {
+  const { showToast } = useToast();
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [settings, setSettings] = useState({
-    backendUrl: 'https://electron-by-envy.vercel.app/',
+    backendUrl: 'https://envy-erp.vercel.app',
     apiKey: '320e016f7a59776fe9dc4cd36d4cc4594cb859379843a9fcef74de5f005eb5ff',
     autoSync: true,
     syncInterval: 5,
@@ -57,17 +62,43 @@ export const SettingsScreen = ({ onLogout }) => {
     setPassError('');
     setPassSuccess('');
     if (!currentPassInput || !newPassInput) {
-      setPassError('Please fill out all password fields.');
+      const msg = 'Please fill out all password fields.';
+      setPassError(msg);
+      showToast(msg, 'warning');
       return;
     }
     const res = await syncService.changePassword(currentPassInput, newPassInput);
     if (res.success) {
       setPassSuccess('Password changed successfully!');
+      showToast('Password changed successfully!', 'success');
       setCurrentPassInput('');
       setNewPassInput('');
       setTimeout(() => setShowPasswordModal(false), 1200);
     } else {
-      setPassError(res.error || 'Failed to change password.');
+      const msg = res.error || 'Failed to change password.';
+      setPassError(msg);
+      showToast(msg, 'error');
+    }
+  };
+
+  const handleManualCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    showToast('Checking server for updates...', 'info');
+    try {
+      const result = await updateService.checkForUpdates(true);
+      setCheckingUpdate(false);
+      if (result.hasUpdate && result.updateInfo) {
+        if (onCheckUpdate) {
+          onCheckUpdate(result.updateInfo);
+        } else {
+          showToast(`Update v${result.updateInfo.version} is available!`, 'success');
+        }
+      } else {
+        showToast(`You are using the latest version (v${CURRENT_APP_VERSION}).`, 'success');
+      }
+    } catch (err) {
+      setCheckingUpdate(false);
+      showToast('Could not reach update server.', 'error');
     }
   };
 
@@ -681,6 +712,38 @@ export const SettingsScreen = ({ onLogout }) => {
                 <Text style={[styles.editButtonText, { color: theme.error }]}>
                   Lock App
                 </Text>
+              </TouchableOpacity>,
+              false,
+            )}
+          </>,
+        )}
+
+        {/* Application Updates */}
+        {renderSection(
+          'Application Updates',
+          <>
+            {renderSettingItem(
+              'Current Installed Version',
+              `v${CURRENT_APP_VERSION} (Build 1)`,
+              'information-circle-outline',
+              <View style={styles.badgePill}>
+                <Text style={styles.badgeText}>UP TO DATE</Text>
+              </View>,
+            )}
+            {renderSettingItem(
+              'Check for Updates',
+              'Connect to server and search for new release',
+              'cloud-download-outline',
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={handleManualCheckUpdate}
+                disabled={checkingUpdate}
+              >
+                {checkingUpdate ? (
+                  <ActivityIndicator size="small" color={theme.primary} />
+                ) : (
+                  <Text style={styles.editButtonText}>Check Now</Text>
+                )}
               </TouchableOpacity>,
               false,
             )}
