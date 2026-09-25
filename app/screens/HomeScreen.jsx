@@ -14,6 +14,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
 import { ERPAnalyticsCharts } from '../components/ERPAnalyticsCharts';
 import { useToast } from '../components/Toast';
+import { CURRENT_APP_VERSION } from '../services/updateService';
 
 const { width } = Dimensions.get('window');
 
@@ -346,12 +347,11 @@ export const HomeScreen = ({ onNavigate }) => {
       >
         {/* Main Header */}
         <View style={styles.header}>
-          <View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Text style={styles.headerTitle}>ENVY</Text>
-            {/* <Text style={styles.headerSubtitle}>
-              {selectedDevice ? selectedDevice.name : 'Synced Device'}{' '}
-              Statistics
-            </Text> */}
+            <View style={styles.versionBadge}>
+              <Text style={styles.versionBadgeText}>v{CURRENT_APP_VERSION}</Text>
+            </View>
           </View>
           <TouchableOpacity
             style={styles.syncNowButton}
@@ -781,6 +781,19 @@ const styles = StyleSheet.create({
     fontWeight: '300', // font-light
     color: theme.textMain,
     letterSpacing: -0.3,
+  },
+  versionBadge: {
+    backgroundColor: 'rgba(218, 244, 170, 0.12)',
+    borderColor: 'rgba(218, 244, 170, 0.3)',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  versionBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.primary,
   },
   headerSubtitle: {
     fontSize: 13,

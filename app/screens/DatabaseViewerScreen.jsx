@@ -1,5 +1,4 @@
 /* eslint-disable react/prop-types */
-/* eslint-disable prettier/prettier */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
@@ -16,6 +15,7 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
+import { CURRENT_APP_VERSION } from '../services/updateService';
 
 // ---------------------------------------------------------------------------
 // Theme — Unified with Dashboard & Mobile ecosystem
@@ -924,7 +924,7 @@ const DatabaseViewerScreen = () => {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Database Records</Text>
         <Text style={styles.headerSubtitle}>
-          {syncService.getSelectedDevice()?.name || 'Device'} · {tables.length}{' '}
+          {syncService.getSelectedDevice()?.name || 'Device'} · v{CURRENT_APP_VERSION} · {tables.length}{' '}
           {tables.length === 1 ? 'table' : 'tables'} available
         </Text>
       </View>

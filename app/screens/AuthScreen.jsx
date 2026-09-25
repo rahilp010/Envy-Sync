@@ -14,6 +14,7 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
 import { useToast } from '../components/Toast';
+import { CURRENT_APP_VERSION } from '../services/updateService';
 
 const theme = {
   background: '#16161b',
@@ -182,7 +183,12 @@ export const AuthScreen = ({ onAuthenticated }) => {
             <View style={styles.logoBadge}>
               <Ionicons name="key-outline" size={24} color={theme.primaryText} />
             </View>
-            <Text style={styles.title}>ENVY SYNC</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.title}>ENVY SYNC</Text>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: theme.primary, backgroundColor: 'rgba(218,244,170,0.12)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(218,244,170,0.3)' }}>
+                v{CURRENT_APP_VERSION}
+              </Text>
+            </View>
             <Text style={styles.subtitle}>
               Enter your License Activation Key to connect
             </Text>

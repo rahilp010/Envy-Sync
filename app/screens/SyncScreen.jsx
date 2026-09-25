@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
 import { useToast } from '../components/Toast';
+import { CURRENT_APP_VERSION } from '../services/updateService';
 
 const theme = {
   background: '#16161b',
@@ -262,8 +263,9 @@ export const SyncScreen = () => {
         {lastSyncTime ? (
           <Text style={styles.metaText}>Last synced: {lastSyncTime}</Text>
         ) : null}
+        <Text style={styles.metaText}>App Version: v{CURRENT_APP_VERSION}</Text>
         {dbVersion !== null ? (
-          <Text style={styles.metaText}>Version: {dbVersion}</Text>
+          <Text style={styles.metaText}>DB Schema: v{dbVersion}</Text>
         ) : null}
       </View>
     </Animated.View>

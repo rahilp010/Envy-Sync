@@ -13,7 +13,10 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
-import updateService, { CURRENT_APP_VERSION } from '../services/updateService';
+import updateService, {
+  CURRENT_APP_VERSION,
+  CURRENT_VERSION_CODE,
+} from '../services/updateService';
 import { useToast } from '../components/Toast';
 
 const theme = {
@@ -724,7 +727,7 @@ export const SettingsScreen = ({ onLogout, onCheckUpdate }) => {
           <>
             {renderSettingItem(
               'Current Installed Version',
-              `v${CURRENT_APP_VERSION} (Build 1)`,
+              `v${CURRENT_APP_VERSION} (Build ${CURRENT_VERSION_CODE})`,
               'information-circle-outline',
               <View style={styles.badgePill}>
                 <Text style={styles.badgeText}>UP TO DATE</Text>
@@ -769,7 +772,7 @@ export const SettingsScreen = ({ onLogout, onCheckUpdate }) => {
 
         {/* App Info */}
         <View style={styles.appInfo}>
-          <Text style={styles.appInfoText}>ENVY SYNC CORE v1.0.0</Text>
+          <Text style={styles.appInfoText}>ENVY SYNC CORE v{CURRENT_APP_VERSION}</Text>
           <Text style={styles.appInfoSubtext}>System Protocol Alpha</Text>
         </View>
       </ScrollView>

@@ -1,5 +1,6 @@
 import { NativeModules, Platform } from 'react-native';
 import syncService from '../../REACT_NATIVE_SYNC_SERVICE';
+import packageJson from '../../package.json';
 
 let RNFS = null;
 const getRNFS = () => {
@@ -13,8 +14,20 @@ const getRNFS = () => {
   return RNFS;
 };
 
-export const CURRENT_APP_VERSION = '1.0.1';
-export const CURRENT_VERSION_CODE = 1;
+export const CURRENT_APP_VERSION = packageJson.version || '1.0.1';
+
+const parseVersionCode = verStr => {
+  if (!verStr) return 1;
+  const parts = String(verStr)
+    .split('.')
+    .map(n => parseInt(n, 10) || 0);
+  if (parts.length >= 3) {
+    return parts[0] * 10000 + parts[1] * 100 + parts[2];
+  }
+  return parts[0] || 1;
+};
+
+export const CURRENT_VERSION_CODE = parseVersionCode(CURRENT_APP_VERSION);
 
 class UpdateService {
   constructor() {
@@ -88,12 +101,24 @@ class UpdateService {
     ).replace(/\/$/, '');
     const apiKey = syncService.apiKey || '';
 
-    // Endpoints to check in priority order (Electron_Backend /api/version first)
+    // Endpoints to check in priority order (passing platform=android)
     const endpoints = [
-      `${baseUrl}/api/version?key=${encodeURIComponent(apiKey)}`,
-      `${baseUrl}/api/sync/update-check?version=${CURRENT_APP_VERSION}&platform=${Platform.OS}`,
-      `${baseUrl}/updates/update.json`,
+      `${baseUrl}/api/version?key=${encodeURIComponent(apiKey)}&platform=${Platform.OS}`,
+      // `${baseUrl}/api/sync/update-check?version=${CURRENT_APP_VERSION}&platform=${Platform.OS}`,
     ];
+
+    const isDesktopFile = urlStr => {
+      if (!urlStr || typeof urlStr !== 'string') return false;
+      const clean = urlStr.toLowerCase().split('?')[0];
+      return (
+        clean.endsWith('.exe') ||
+        clean.endsWith('.zip') ||
+        clean.endsWith('.dmg') ||
+        clean.endsWith('.msi') ||
+        clean.endsWith('.tar.gz') ||
+        clean.endsWith('.appimage')
+      );
+    };
 
     const parseReleaseNotes = notes => {
       if (!notes) return ['General performance enhancements and bug fixes.'];
@@ -129,24 +154,82 @@ class UpdateService {
 
         if (response.ok && response.status === 200) {
           const data = await response.json();
-          const latestVer = data.version || data.latestVersion;
-          const apkUrl = data.url || data.apkUrl || data.update;
+
+          // Check for Android-specific sub-objects or fields
+          const androidObj =
+            data.android || data.platforms?.android || data.mobile || {};
+
+          let latestVer =
+            androidObj.version ||
+            data.androidVersion ||
+            data.mobileVersion;
+
+          let apkUrl =
+            androidObj.url ||
+            androidObj.apkUrl ||
+            data.androidApkUrl ||
+            data.androidUrl ||
+            data.apkUrl;
+
+          const rawUrl = data.url || data.update;
+          const isRawUrlDesktop = isDesktopFile(rawUrl);
+
+          // If no explicit Android version found, check if root data is for Desktop
+          if (!latestVer) {
+            const isDesktopPlatform =
+              data.platform === 'windows' ||
+              data.platform === 'desktop' ||
+              data.platform === 'win32' ||
+              data.target === 'electron' ||
+              isRawUrlDesktop;
+
+            if (isDesktopPlatform) {
+              console.log(
+                `[UpdateService] Skipping desktop EXE/ZIP release payload from ${url}:`,
+                data.version,
+                rawUrl,
+              );
+              continue; // Skip desktop update payloads on mobile
+            }
+
+            latestVer = data.version || data.latestVersion;
+          }
+
+          // Ensure APK URL doesn't point to an .exe or .zip desktop binary
+          if (!apkUrl || isDesktopFile(apkUrl)) {
+            if (rawUrl && !isDesktopFile(rawUrl) && rawUrl.toLowerCase().includes('.apk')) {
+              apkUrl = rawUrl;
+            } else {
+              apkUrl = `${baseUrl}/download/envy-sync-latest.apk`;
+            }
+          }
+
           const notes =
-            data.changeLog || data.notes || data.releaseNotes || data.readme;
+            androidObj.releaseNotes ||
+            androidObj.notes ||
+            data.changeLog ||
+            data.notes ||
+            data.releaseNotes ||
+            data.readme;
 
           if (latestVer) {
+            const versionCode =
+              androidObj.versionCode ||
+              data.androidVersionCode ||
+              data.versionCode;
+
             const hasNewVersion =
               this.isNewerVersion(latestVer, CURRENT_APP_VERSION) ||
-              (data.versionCode && data.versionCode > CURRENT_VERSION_CODE);
+              (versionCode && versionCode > CURRENT_VERSION_CODE);
 
             if (hasNewVersion) {
               this.updateInfo = {
                 version: latestVer,
-                versionCode: data.versionCode || 2,
-                apkUrl: apkUrl || `${baseUrl}/download/envy-sync-latest.apk`,
+                versionCode: versionCode || 2,
+                apkUrl: apkUrl,
                 releaseNotes: parseReleaseNotes(notes),
-                mandatory: !!data.mandatory,
-                fileSize: data.fileSize || '14.5 MB',
+                mandatory: !!(androidObj.mandatory || data.mandatory),
+                fileSize: androidObj.fileSize || data.fileSize || '14.5 MB',
               };
 
               if (
@@ -188,6 +271,17 @@ class UpdateService {
   async downloadApk(onProgress) {
     if (!this.updateInfo || !this.updateInfo.apkUrl) {
       throw new Error('No update APK URL available');
+    }
+
+    const cleanUrl = this.updateInfo.apkUrl.toLowerCase().split('?')[0];
+    if (
+      cleanUrl.endsWith('.exe') ||
+      cleanUrl.endsWith('.zip') ||
+      cleanUrl.endsWith('.msi')
+    ) {
+      throw new Error(
+        'Invalid update package: Server provided a desktop release (.exe/.zip) instead of an Android APK file.',
+      );
     }
 
     const fs = getRNFS();
@@ -264,7 +358,7 @@ class UpdateService {
       if (!canInstall) {
         await Installer.openInstallPermissionSettings();
         throw new Error(
-          'Please grant permission to install unknown apps for Envy_Sync, then tap Install again.',
+          'Please grant permission to install unknown apps for Envy, then tap Install again.',
         );
       }
 
